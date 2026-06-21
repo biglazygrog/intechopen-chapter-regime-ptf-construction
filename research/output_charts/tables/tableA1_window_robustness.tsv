@@ -1,0 +1,6 @@
+Window size	Step size	No. of windows	Probability correlation vs baseline	Probability mean absolute error vs baseline	Minimum effective sample size (min)	Minimum effective sample size (5th pct.)	Minimum effective sample size (median)	Minimum eigenvalue	Maximum condition number	Near-singular matrices
+1000	63	42	0.996	0.020	28.66	36.57	150.53	0.0000010	3742.81	0
+1250	21	114	0.997	0.015	25.01	29.10	150.27	0.0000010	5716.68	0
+1250	63	38	1.000	0.000	26.53	34.92	151.87	0.0000010	5591.53	0
+1250	126	19	0.997	0.018	56.44	87.01	156.47	0.0000010	5613.42	0
+1500	63	35	0.986	0.033	28.08	33.31	146.57	0.0000010	5679.97	0

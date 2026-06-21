@@ -1,0 +1,14 @@
+bbg_ticker,name,asset_block,sub_category
+MSDEUSN Index,us_equities,Equities,US equities
+M7EU Index,eu_equities,Equities,European equities
+MSDEEEMN Index,em_equities,Equities,Emerging market equities
+LT01TRUU Index,gov_short,Fixed income,Gov bonds short duration
+LUTLTRUU Index,gov_long,Fixed income,Gov bonds long duration
+LF94TRUU Index,inflation_linked,Fixed income,Inflation-linked bonds
+LGCPTRUU Index,ig_credit,Credit,Investment-grade credit
+LG30TRUU Index,high_yield,Credit,High yield
+EMUSTRUU Index,em_debt,Credit,EM debt
+FNERTR Index,real_estate,Real assets,Listed real estate
+BCOMEN Index,energy,Commodities,Energy
+XAU Curncy,gold,Precious metals,Gold
+US0003M Index,cash,Cash,Short-term cash

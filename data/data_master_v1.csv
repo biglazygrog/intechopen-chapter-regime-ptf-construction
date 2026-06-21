@@ -1,0 +1,7 @@
+bbg_ticker,name,asset_block
+NDDUWI Index,world_equities,Equities
+BTSYTRUU Index,us_treasuries,Fixed income
+LGCPTRUU Index,ig_credit,Credit
+BCOMTR Index,commodities,Commodities
+LD12TRUU Index,high_yield,Credit
+XAU Index,gold,Precious metals
