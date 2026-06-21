@@ -144,7 +144,7 @@ def _save_dominant_forecast_eval(daily_k2: pd.DataFrame) -> None:
     realised = (p1 > 0.5).astype(int)
 
     out = pd.DataFrame({
-        "date_t":  p1.index.shift(-1),
+        "date_t":  p1.index.to_series().shift(1).values,
         "date_t1": p1.index,
         "p_ar_t1": forecast_ar.values,
         "p_rw_t1": forecast_rw.values,

@@ -6,7 +6,6 @@ This folder accompanies *Regime-Aware Portfolio Construction: A Gaussian Mixture
 
 ```
 submission/
-├── chapter_intechopen_v5.docx            # the paper itself
 ├── README.md                              # this file
 ├── requirements.txt                       # pinned Python dependencies
 ├── core/

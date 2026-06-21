@@ -1,5 +1,5 @@
 """
-Figure 1 — Posterior Regime Probabilities, Rolling GMM Estimation (2000-2024).
+Figure 1 — Posterior Regime Probabilities, Rolling GMM Estimation (2000-2025).
 
 Reads daily_regime_probabilities.csv produced by pipeline.py and emits a
 stacked-area chart in trace order (p_0 = calm, p_{K-1} = crisis).
@@ -41,7 +41,7 @@ def main():
     ax.set_xlim(P.index.min(), P.index.max())
     ax.set_ylabel("Posterior probability")
     ax.set_xlabel("Date")
-    ax.set_title("Posterior Regime Probabilities, Rolling GMM Estimation (2000–2024)")
+    ax.set_title("Posterior Regime Probabilities, Rolling GMM Estimation (2000–2025)")
     ax.xaxis.set_major_locator(mdates.YearLocator(2))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
     ax.grid(alpha=0.25)

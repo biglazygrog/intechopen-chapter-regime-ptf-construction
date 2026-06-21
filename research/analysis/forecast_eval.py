@@ -362,6 +362,7 @@ def main():
 
     summary = results["summary"]
     details = results["details"]
+    horizons = AR_HORIZONS
 
     # Print results
     print("\n" + "=" * 70)
