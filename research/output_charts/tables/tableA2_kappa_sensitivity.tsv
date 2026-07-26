@@ -1,8 +1,8 @@
 Configuration	Target prior weight p	kappa_0	K stability	Mean drift (x10^-3)	Probability autocorrelation	Mean BIC	Mean prior coverage
-Baseline (grand mean)	0%	0.01	0.676	1.756	0.238	59,264.0	n/a
-Previous-epoch prior	0%	0.0	0.676	1.753	0.237	59,264.0	92.1%
-Previous-epoch prior	5%	29.9	0.784	1.158	0.204	59,260.4	93.9%
-Previous-epoch prior (PRIMARY)	10%	63.1	0.784	1.064	0.208	59,260.1	93.9%
-Previous-epoch prior	15%	100.2	0.838	0.943	0.208	59,260.1	94.7%
-Previous-epoch prior	25%	189.3	0.892	1.051	0.222	59,255.2	95.6%
-Previous-epoch prior	50%	568.0	0.946	0.770	0.219	59,247.5	96.5%
+Baseline (grand mean)	0%	0.01	0.937	1.042	0.357	59,352.6	n/a
+Previous-epoch prior	0%	0.0	0.937	1.042	0.357	59,352.6	97.9%
+Previous-epoch prior	5%	29.9	0.899	1.000	0.173	59,353.0	97.1%
+Previous-epoch prior (PRIMARY)	10%	63.1	0.899	0.967	0.178	59,351.8	97.1%
+Previous-epoch prior	15%	100.2	0.899	0.972	0.161	59,350.9	97.1%
+Previous-epoch prior	25%	189.3	0.899	0.976	0.158	59,349.0	97.1%
+Previous-epoch prior	50%	568.0	0.873	0.667	0.159	59,343.4	96.7%

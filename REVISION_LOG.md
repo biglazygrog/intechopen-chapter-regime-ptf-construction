@@ -116,6 +116,17 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 | `research/analysis/backtest.py` | both `backtest_*` fns, `main` | Return and print `first_rebalance` / `start_date`, so a silent warm-up gate is visible in the summary rather than hidden. | DONE |
 | `research/analysis/validate_onesided.py` | **NEW file** | Runnable as `python -m research.analysis.validate_onesided [--t2] [--full]`. Implements T1, T2, T3, T5. | DONE |
 | `.gitignore` | **NEW file** | `__pycache__/`, `*.py[cod]`, venvs, build artefacts, editor cruft, `*.log`. Deliberately does **not** ignore `research/output_charts/`. | DONE |
+| **BLOCK 2** — grid correction (Open questions 8, 9) | | | |
+| `core/utils.py` | `filter_synchronous_trading`, `CASH_LIKE_ASSETS` | **NEW.** Single definition of the synchronous-trading filter, replacing five independent copies. Tests only market indices; cash-like series are exempt because at a pinned policy rate their zero is a rounding artefact of a genuinely near-zero return, not a stale quote. Exempt names absent from a universe are ignored, so it is safe across core and extended tiers. | DONE |
+| `research/analysis/pipeline.py` | `main` | Use the shared helper; rewrite the filter comment to the corrected rationale (F-a superseded). | DONE |
+| `research/analysis/robustness.py` | `main` | Use the shared helper. | DONE |
+| `research/analysis/shrinkage.py` | `main` | Use the shared helper. | DONE |
+| `research/analysis/stability_analyzer.py` | `_run_tier` | Use the shared helper (per tier). | DONE |
+| `research/analysis/validate_onesided.py` | `_load_returns` | Use the shared helper. | DONE |
+| `core/config.py` | `ANN_FACTOR` | 144.40 → **248.48** (6269 / 25.229 yr), with the corrected derivation comment. | DONE |
+| `core/config.py` | `WINDOW_SIZE` comment | **Reverts the Block 1 F-b correction.** The grid is now near-regular, so 1250 observations ≈ 5.0 years (range 4.96-5.24) — "approximately five years" is accurate again. | DONE |
+| `research/figures/figureA1_observations_per_year.py` | **NEW file** | Appendix Figure A.1 producer — observations per year on the corrected grid. Single hue, hatched partial years, mean line, selective labels. | DONE |
+| `README.md` | — | "The observation grid is irregular" section replaced by "The synchronous-trading filter": corrected rationale, cash exemption, the 96.8% attribution, new row chain (12018 → 6605 → 6269), near-regular grid, `ANN_FACTOR` 248.48, window span 4.96-5.24 yr. Look-ahead probe table and one-sided start date recomputed on the new grid. | DONE |
 | `README.md` | — | New section "Retrospective vs one-sided regime probabilities": mechanism, look-ahead magnitude, which artefact consumes which file, reduced one-sided sample (2007-02-05 onward, 2393 rows). Add probability-series column to the artefact→producer table. Correct the "5 years" window wording (F-b). | DONE |
 | `REVISION_LOG.md` | — | This file. Kept current; committed with the code. | DONE |
 
@@ -134,6 +145,101 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 
 *Newest first. One entry per working session, written before every commit and at
 the end of every session even if nothing was committed.*
+
+### 2026-07-26 — Block 2, session 4 (option (a) implementation)
+
+**Done.** Implemented option (a) — the synchronous-trading filter now tests the
+five market indices only; cash (`LD12TRUU`) is retained unconditionally.
+
+1. Consolidated the filter into `core.utils.filter_synchronous_trading`, one
+   definition replacing five independent copies. `CASH_LIKE_ASSETS = ("high_yield",)`
+   is exempt; names absent from a universe are ignored, so it is safe across the
+   core and extended tiers.
+2. `ANN_FACTOR` 144.40 → **248.48**. `WINDOW_SIZE` comment reverted to
+   "≈ 5.0 years (range 4.96-5.24)" — the Block 1 F-b correction is no longer
+   needed, because the corrected grid really is near-regular.
+3. Added `research/figures/figureA1_observations_per_year.py` as a permanent
+   producer, matching the repo's one-producer-per-figure convention.
+4. README's "observation grid is irregular" section replaced by "The
+   synchronous-trading filter", with the corrected rationale, the cash
+   exemption, the 96.8% attribution, and recomputed look-ahead probes.
+5. Regenerated **everything**: pipeline, forecast_eval, backtest, Figures 1-3,
+   Figure A.1, moments, correlations, robustness, shrinkage, stability.
+6. Open question 9 closed; Block 3 cancelled.
+
+**Tested.** T = 3,643 → **6,269**. One-sided series 2,393 → **5,019 rows**,
+starting 2006-01-30. Backtest starts **2007-03-06**. Rolling windows 38 → **80**.
+Grid now near-regular: every full year 232-253 observations (mean 250.0), vs
+13-250 before.
+
+Validation re-run on the corrected grid: **T1, T2, T3, T5 all PASS** (T1 and T2
+both exact zero). **T4 PASS under its redefinition** — all four probability CSVs
+byte-identical across two independent full pipeline runs. T6 reported.
+
+**Two Block 1 conclusions changed.** Short-horizon forecast skill does not
+survive (AR Change now fails the always-calm baseline at every horizon), and the
+AR strategies now beat the random walk in the backtest (0.753 vs 0.648),
+reversing Block 1. Both are recorded under "Headline results — FINAL", and the
+chapter-text follow-up has been rewritten accordingly. Block 1's numbers were
+computed on a sample that excluded most of the zero-rate era and are superseded.
+
+**Not committed.** Awaiting author confirmation of the four requested items.
+
+**Next.** Author confirms → stage and commit. Then Block 2 Phase 2 (the
+Section 3.1 draft text), which now needs a different item (d): the grid is
+regular, not irregular, so the appendix chart demonstrates regularity.
+
+### 2026-07-26 — Block 2, Phase 1 (data-section analysis)
+
+**Done.** Three read-only analyses on the existing filtered grid. No code, data
+or chapter changes. Produced `research/output_charts/figures/
+figureA1_observations_per_year.{png,pdf}` (single-series bar chart, house style).
+
+**Findings — the headline result contradicts the expected framing.**
+
+1. **Stress episodes are partially and unevenly excluded.** Baseline drop rate
+   across the whole pre-filter grid is 44.8%.
+
+   | Window | dates | dropped | % of all drops | % of window | vs baseline |
+   |---|---|---|---|---|---|
+   | GFC 2007-06→2009-03 | 478 | 116 | 3.9% | 24.3% | −20.6pp |
+   | EU sovereign 2010-05→2012-09 | 630 | 537 | 18.1% | **85.2%** | **+40.4pp** |
+   | COVID 2020-02→2020-06 | 107 | 59 | 2.0% | **55.1%** | **+10.3pp** |
+   | 2022 tightening | 260 | 101 | 3.4% | 38.8% | −6.0pp |
+
+   The GFC survives well (362 observations retained). The **EU sovereign debt
+   crisis does not** — 85.2% of its dates are dropped, leaving 93 observations
+   across a 29-month crisis. COVID retains only 48 of 107.
+
+2. **The density shift is NOT concentrated in the early sample.** It is
+   concentrated in the middle: 2000-2008 drops 22.4%, **2009-2016 drops 82.8%**,
+   2017-2026 drops 31.7%. Worst years: 2021 (95.0%), 2013 (90.0%), 2015 (88.9%),
+   2011 (87.7%).
+
+3. **The filter is driven almost entirely by one series.** `high_yield` is zero
+   in **96.8%** of all dropped rows (100% within the EU sovereign window). No
+   other asset exceeds 8.5%.
+
+**This undermines the intended justification.** `high_yield` is `LD12TRUU Index`
+— a Bloomberg US Short Treasury 1-12 Month index, displayed as "Cash" in
+`ASSET_DISPLAY`. Its zero-return stretches coincide exactly with zero-interest-
+rate policy: 2009-2016 (price pinned in [191.19, 192.23], 105 distinct values in
+seven years), 2021 (10 distinct values all year), 2003-2004 (Fed at 1%), versus
+4.6% zero days in 2023-2025 once rates normalised.
+
+Those zeros are therefore **not stale quotes from an asset that did not trade**.
+They are a rounding artefact: at a near-zero policy rate the true daily accrual
+on a T-bill index falls below the stored price precision (~2.6bp on a level of
+192 recorded to 2 d.p.). The synchronous-trading argument specified for Phase 2
+item (a) is **not accurate for the cause of 96.8% of the exclusions**, and item
+(c) cannot "confirm stress periods are not systematically excluded" — one major
+episode is.
+
+**Phase 2 held.** Drafting the specified text would put an inaccurate rationale
+into the manuscript. Author decision required — see "Open questions" item 8.
+
+**Next.** Author rules on item 8; then draft Section 3.1 text against whatever
+rationale is actually correct.
 
 ### 2026-07-26 — implementation session 3 (backtest coverage)
 
@@ -298,9 +404,91 @@ backtest numbers should not go to the editor until that is resolved.
    `orig_idx + 1`: **n=290, sum(p_1)=67.4, no fallback**, and no fallback at any
    recompute through the GFC.
 
+9. **[RESOLVED 2026-07-26 — implemented, see session 4]** Block 2 implementation
+   questions.
+
+   **9a resolved:** regenerate the retrospective CSVs in place; T4 is redefined
+   against the corrected 5-asset grid. The old committed files are superseded,
+   not kept as separate artefacts.
+   **9b resolved:** Block 3 cancelled — see the Block 3 section.
+
+   Option (a) analysis, 2026-07-26. Effects:
+
+   | | OLD (6-asset filter) | NEW (5 non-cash) |
+   |---|---|---|
+   | T | 3,643 | **6,269** (+72%) |
+   | 2009-2016 observations | 358 | **2,012** |
+   | 2020 / 2021 | 77 / 13 | **253 / 252** |
+   | Per-year drop rate | 4.6-95.0% | **3.1-5.0%** |
+   | `ANN_FACTOR` | 144.40 | **248.48** |
+   | 1250-obs window span | 5.96-14.28 yr | **4.96-5.24 yr** |
+   | Rolling windows | 38 | **80** |
+   | Last window start/end idx | 2331 / 3580 | **4977 / 6226** |
+   | One-sided series | 2007-02-05, 2,393 rows | **2006-01-30, 5,019 rows** |
+   | Backtest start | 2008-04-01 | **2007-03-06** |
+
+   The grid becomes near-regular; the residual 3-5% drop is genuine
+   non-synchronous market holidays across five markets, which is what the
+   filter was always meant to catch.
+
+   The filter was replicated at **five** sites (`pipeline.py`, `robustness.py`,
+   `shrinkage.py`, `stability_analyzer.py`, `validate_onesided.py`) which could
+   silently drift apart. Consolidated into
+   `core.utils.filter_synchronous_trading`.
+
+8. **[RESOLVED 2026-07-26 — option (a) approved by author]** The filter's stated
+   rationale did not match its actual behaviour, and it removed most of the
+   zero-rate era.
+
+   **Resolution: apply `(df != 0).all(axis=1)` to the five non-cash market
+   index assets only; Cash (`LD12TRUU`) is retained unconditionally.** The
+   synchronous-trading argument is valid for the five market indices, where a
+   forward-filled zero really does mean the market did not trade. It was never
+   valid for a short-Treasury index at a pinned policy rate, where the zero is a
+   rounding artefact of a genuinely near-zero return. Implementation effects and
+   remaining decisions are tracked as item 9.
+
+   Original diagnosis retained below for the record.
+
+   Phase 1 established that 96.8% of dropped rows are dropped because
+   `high_yield` (`LD12TRUU Index`, a 1-12 month short-Treasury index displayed
+   as "Cash") has a zero return, and that its zero stretches coincide with ZIRP
+   rather than with non-trading. The consequences:
+
+   - The "stale price / asset did not trade" justification is **wrong for the
+     dominant cause**. At a pinned policy rate the true daily accrual is smaller
+     than the stored price precision, so the zero is a rounding artefact of a
+     genuinely near-zero return — not a missing observation.
+   - The filter therefore removes **most of 2009-2016 and 2020-2021** — the
+     zero-rate era — and with it 85.2% of the EU sovereign debt crisis and 55.1%
+     of the COVID drawdown.
+   - The GMM never sees those periods, so the "regimes" it identifies are
+     estimated almost entirely from positive-rate environments.
+
+   Options:
+
+   - **(a) Restrict the filter to the five non-cash assets.** Requires the joint
+     return vector to be informative where it matters for covariance structure,
+     while letting a legitimately-flat cash series through. Recovers most of
+     2009-2016 and the EU sovereign window. Changes `T` and re-opens every
+     Block 1 baseline — a full re-run and re-validation.
+   - **(b) Drop `high_yield`/"Cash" from the universe** and run on five assets.
+     Cleanest statistically (a pinned cash series contributes almost nothing to
+     a regime covariance structure anyway) but changes the asset universe the
+     editor reviewed and affects Tables 1, 3, 4.
+   - **(c) Keep the filter, and disclose accurately** — state that the sample is
+     conditioned on positive-rate periods and that the regime model is not
+     identified over ZIRP. Honest, requires no re-run, but is a substantial
+     limitation to put in writing.
+   - **(d) Keep the filter and write the originally-specified rationale.** Not
+     available — it would put an inaccurate statement in the manuscript.
+
+   No code, data or text changed pending this decision.
+
 *Questions 1-5 were raised before implementation and all resolved on
 2026-07-26; resolutions recorded below. Questions 6 and 7 arose during
-validation and coverage review and were resolved the same day.*
+validation and coverage review and were resolved the same day. Question 8 arose
+in Block 2 Phase 1 and is open.*
 
 ### Resolved
 
@@ -329,63 +517,70 @@ validation and coverage review and were resolved the same day.*
 Disclose and justify the `(df != 0).all(axis=1)` filter in the chapter's Data
 section. Required content, per author instruction:
 
-- **Explicit disclosure:** 6,605 → 3,643 observations, and why.
-- **Justification:** synchronous-trading argument — stale prices corrupt the
-  cross-asset covariance; on days where any asset did not trade the joint return
-  vector is not informative.
-- **Supporting analysis, to be done before writing:**
-  - (a) Check dropped dates against stress episodes (GFC, European sovereign
-    debt crisis, COVID) and confirm stress periods are **not** systematically
-    excluded.
-  - (b) Bar chart of observations per year for the appendix, making the density
-    shift visible to reviewers.
+Phase 1 (analysis) is **complete** — see the session-3 and session-4 entries.
+Phase 2 (the Section 3.1 draft text) is **outstanding**, and its brief has
+changed because Phase 1 overturned the premise it was written against.
+
+Required content, as revised:
+
+- **(a) Justification — corrected.** The synchronous-trading argument applies to
+  the **five market indices**: a forward-filled zero means the market did not
+  trade, and such a row would corrupt the cross-asset covariance the GMM relies
+  on. It does **not** apply to cash (`LD12TRUU`), where a zero at a pinned policy
+  rate is an economically genuine near-zero return. Testing cash accounted for
+  96.8% of all drops. The original brief's blanket "any asset did not trade"
+  wording would be inaccurate.
+- **(b) Effect — corrected figures.** 6,605 → **6,269** observations (not 3,643).
+- **(c) Stress-episode result.** Under the corrected filter no stress window is
+  materially affected. Report the superseded 6-asset behaviour only if the
+  chapter needs to explain the correction.
+- **(d) Caption — rewritten.** State that the filter achieves **near-uniform
+  synchronous trading coverage**. The "13-250 obs/year" line is obsolete and must
+  be removed; every full year now retains 232-253 observations (mean 250.0).
+  Reference Figure A.1, which now demonstrates regularity rather than
+  irregularity.
+- **(e) Window span.** "1,250 trading days (approximately five years)" is now
+  accurate — the corrected grid gives 4.96-5.24 calendar years. No correction
+  needed, contrary to the original brief.
 - **Framing:** a motivated methodological choice, not data cleaning.
 
-Note the tension to resolve honestly in (a): the counts already in this log show
-2021 with 13 observations and 2013 with 26, against 250 in 2024. Whether the
-2008, 2011-12 and 2020 stress windows survive the filter is exactly what (a)
-must establish, and the answer is not assumed here.
+Draft length: 3-5 sentences integrated into the existing Section 3.1 paragraph.
+Author edits and approves before anything is written to the chapter document.
 
-## Queued for Block 3 — Expanding-window backtest appendix
+## Block 3 — CANCELLED 2026-07-26
 
-**Not started. Decision deferred until after Block 2.**
+The expanding-window backtest appendix is **cancelled**, by author decision.
 
-> Expanding window appendix — decision deferred until after Block 2. Before
-> implementing, run the expanding window as a standalone analysis and report
-> headline numbers (Sharpe, max DD, first rebalance date for all five
-> strategies) so the decision on whether to write it up can be made with full
-> information. Key question: does the conclusion change over the longer sample?
-> If Oracle still clears Unconditional and AR still fails to beat Random Walk,
-> the appendix adds robustness. If results differ materially, assess whether the
-> inconsistent estimation spec (250 → 1250 expanding then rolling) requires
-> additional caveating that would undermine the appendix value.
-
-Reference figures from the session-3 analysis, for scoping: an expanding window
-with a 250-observation minimum could emit its first probability at **2002-02-20**
-and, with the burn-in left at 252, start the backtest at **2003-08-22** — about
-4.5 additional years versus the current 2008-04-01. The estimation-consistency
-concerns are recorded in the "Known issues out of scope" table and in the
-session-3 log entry.
+**Reason: rendered unnecessary by the option (a) grid correction.** Block 3
+existed to extend backtest coverage earlier than 2008-04-01 without an
+expanding-window estimation spec being the only route. Correcting the filter to
+exempt cash raises T from 3,643 to 6,269 and moves the backtest start to
+**2007-03-06** — thirteen months earlier and before the 2008 drawdown window, so
+the full 2007 crisis onset is now covered on the paper's own rolling
+1250-observation spec. The appendix would add an inconsistent estimation spec
+(250 → 1250 expanding, then rolling) for coverage the corrected grid already
+provides.
 
 ## Chapter-text follow-up (Block 1 finding, author to action)
 
-Per author instruction on T6: update the chapter conclusion to state that
-forecast skill is **short-horizon only** — +1.04pp at h=1, approximately flat at
-h=5 (+0.09pp), negative at h=21 (−2.97pp), all measured against the always-calm
-baseline. This is a finding, not a failure.
+**Author-approved framing, 2026-07-26.** The Block 1 "short-horizon skill"
+framing is withdrawn — it does not survive the corrected grid and must not
+appear in the paper. Do not attempt to salvage it.
 
-The final Figure 4 result is consistent with it and needs to be reflected too:
+The conclusion and abstract take these three findings:
 
-- The infeasible Oracle (Sharpe 0.718) beats the unconditional benchmark (0.449)
-  decisively on both Sharpe and drawdown, so the regime signal carries real
-  economic value.
-- No feasible forecast captures it: AR Change 0.396 and AR Baseline 0.373 both
-  underperform Unconditional, at 4-5x its turnover.
-- **The AR forecasts do not beat a random walk in the backtest** (RW 0.430).
-  This follows directly from the Figure 2 result — the backtest rebalances
-  monthly against a 21-observation horizon, exactly where AR Change loses to the
-  always-calm baseline. The chapter should not claim AR forecasting adds value
-  at the allocation horizon; it does not.
+1. **Regime information has genuine economic value:** Oracle (Sharpe 1.154)
+   decisively clears Unconditional (0.799).
+
+2. **AR forecast portfolios partially capture the signal in portfolio terms** —
+   AR Baseline and AR Change (both 0.753) beat Random Walk (0.648) — but fall
+   short of the unconditional benchmark (0.799). The regime signal is real but
+   the forecast is too noisy to translate into a net improvement.
+
+3. **Forecast accuracy is below the always-calm baseline at every horizon**
+   (−0.91pp at h=1, −2.42pp at h=5, −2.89pp at h=21). Regime transitions are not
+   predictable in a classification sense, even though the portfolio construction
+   around probabilistic forecasts adds modest value over pure random walk.
 
 ---
 
@@ -408,30 +603,62 @@ The final Figure 4 result is consistent with it and needs to be reflected too:
 
 ## Validation checklist
 
-Run 2026-07-26 via `python -m research.analysis.validate_onesided --t2`.
+**Re-run 2026-07-26 on the CORRECTED 5-asset grid (T = 6,269)** via
+`python -m research.analysis.validate_onesided --t2`. Block 1 results on the
+superseded 3,643-row grid are noted in each row for comparison.
 
-| Test | Description | Status | Result |
+| Test | Description | Status | Result (corrected grid) |
 |---|---|---|---|
-| **T1** | **Truncation invariance (decisive).** Fit on `X[:t]` only, compute the one-sided series, compare against the full-sample fit's one-sided series restricted to dates ≤ the last common window end. Must be exactly equal. Run at three cut points. | **PASS** | Cuts at t=1639 (2008-10-03), t=2550 (2019-08-14), t=3205 (2024-04-18). `max abs diff = 0.000e+00`, **bitwise identical** at all three over 1389 / 2300 / 2955 overlapping dates. |
-| **T2** | **Future corruption.** Replace `X[t+1:]` with noise, refit, assert `p_s` unchanged for all `s ≤ t`. Catches leakage via BIC/K-selection and the EWMA/prior paths that T1 could mask. Reduced spec (`K_candidates=[2]`, `window_size=250`). | **PASS** | Future replaced with N(0, 10σ) noise at the same three cut points. `max abs diff` on all past dates = `0.000e+00`. |
-| **T3** | **Index-level assertion (also inline in `get_filtered_probabilities`, every call).** For every emitted date *t*, `window_end_indices_[w(t)] < t`. Date→model map is a strict partition. First emitted index > `WINDOW_SIZE - 1`. | **PASS** | Paper spec. 0 dates without a strictly-past model; 0 duplicated dates; first emitted index 1250 (> 1249); model map covers 2393 dates = 2393 emitted. |
-| **T4** | **Regression on preserved outputs.** Regenerated `daily_regime_probabilities.csv` and `daily_regime_probabilities_forecast.csv` must be byte-identical to the committed versions. | **PASS (with caveat)** | Not byte-identical on regeneration: `max abs diff = 3.55e-15`, **0 rows differing by >1e-9, 0 hard-label flips**. Proven NOT caused by this change set — HEAD's `models/gmm.py` and the current one produce **bitwise-identical** output on this machine (isolation test, K=2 paper spec, `max abs diff = 0.000e+00`). The drift is environmental (committed CSVs were generated on a different BLAS/library build). **Both files were restored with `git checkout`, so the committed retrospective series is preserved byte-for-byte.** |
-| **T5** | **Structural sanity.** Row sums = 1 ± 1e-9; no NaN; monotonic unique index; `len(one_sided) == T - WINDOW_SIZE`. | **PASS** | Paper spec. Row-sum range `[1.000000000000, 1.000000000000]`; no NaN; no negative probabilities; index monotonic and unique; length 2393 = 3643 − 1250. |
-| **T6** | **Honest-skill report (output, not pass/fail).** Recompute Figure 2 metrics on the one-sided series and report hit rate against the always-calm baseline. | **PASS (reported)** | See "Headline result changes" below. AR Change now beats the always-calm baseline by **+1.04pp (h=1)** and **+0.09pp (h=5)**, and **loses by −2.97pp (h=21)**. `n_forecasts` 3310 → 2120. |
+| **T1** | **Truncation invariance (decisive).** Fit on `X[:t]` only, compute the one-sided series, compare against the full-sample fit's one-sided series over the dates both can serve. Must be exactly equal. Three cut points. | **PASS** | Cuts at t=2821 (2012-04-27), t=4388 (2018-07-24), t=5516 (2023-01-20). `max abs diff = 0.000e+00`, **bitwise identical** at all three. (Block 1: also PASS.) |
+| **T2** | **Future corruption.** Replace `X[t+1:]` with N(0, 10σ) noise, refit, assert `p_s` unchanged for all `s ≤ t`. Catches leakage via BIC/K-selection and the EWMA/prior paths that T1 could mask. | **PASS** | `max abs diff` on all past dates = `0.000e+00` at all three cut points. (Block 1: also PASS.) |
+| **T3** | **Index-level assertion (also inline in `get_filtered_probabilities`, every call).** Every emitted date is served by a model with `e_w < t`; the date→model map is a strict partition; first emitted index > `WINDOW_SIZE - 1`. | **PASS** | 0 dates without a strictly-past model; 0 duplicates; first emitted index 1250; map covers 5019 dates = 5019 emitted. |
+| **T4** | **REDEFINED (author decision, Open question 9a).** Formerly byte-identity against the committed 6-asset CSVs — impossible once the input grid changes. Now: **byte-identity across independent pipeline runs on the corrected grid**, i.e. reproducibility. | **PASS** | All four probability CSVs byte-identical across two independent full pipeline runs (`cmp` clean). The superseded 6-asset files are replaced in place, not retained. |
+| **T5** | **Structural sanity.** Row sums = 1 ± 1e-9; no NaN; no negative probabilities; monotonic unique index; `len(one_sided) == T - WINDOW_SIZE`. | **PASS** | All checks pass; length 5019 = 6269 − 1250. |
+| **T6** | **Honest-skill report (output, not pass/fail).** Figure 2 metrics against the always-calm baseline. | **PASS (reported)** | **Conclusion changed — see below.** AR Change now **fails to beat the baseline at every horizon**: −0.91pp (h=1), −2.42pp (h=5), −2.89pp (h=21). Block 1's short-horizon skill (+1.04pp at h=1) does not survive the grid correction. |
 
-### Headline result changes (one-sided vs retrospective)
+### Headline results — FINAL (corrected 5-asset grid, T = 6,269)
 
-Forecast hit rates, `ar_change_multihorizon_summary.csv`:
+**Both Block 1 conclusions changed when the grid was corrected.** Block 1's
+numbers were computed on a sample that excluded most of the zero-rate era; they
+are superseded.
 
-| Horizon | Always-calm baseline | AR Change (before) | AR Change (after) | Gain vs baseline (before → after) |
-|---|---|---|---|---|
-| 1-day | 0.8737 → 0.8520 | 0.8864 | 0.8624 | +1.27pp → **+1.04pp** |
-| 5-day | 0.8737 → 0.8530 | 0.8701 | 0.8539 | −0.36pp → **+0.09pp** |
-| 21-day | 0.8740 → 0.8577 | 0.8610 | 0.8280 | −1.30pp → **−2.97pp** |
+Forecast hit rates vs the always-calm baseline, `ar_change_multihorizon_summary.csv`:
 
-Figure 3 (`dominant_regime_forecast_eval.csv`): AR and RW were bit-identical
-(both 0.8377). Now genuinely distinct — **AR 0.8525 vs RW 0.8291**, against an
-always-calm baseline of 0.8530.
+| Horizon | Always-calm | AR Change | Gain | AR Baseline | Random Walk |
+|---|---|---|---|---|---|
+| 1-day | 0.8572 | 0.8481 | **−0.91pp** | 0.8564 | 0.8265 |
+| 5-day | 0.8570 | 0.8328 | **−2.42pp** | 0.8540 | 0.8128 |
+| 21-day | 0.8572 | 0.8283 | **−2.89pp** | 0.8583 | 0.8075 |
+
+Superseded Block 1 gains (3,643-row grid): +1.04pp / +0.09pp / −2.97pp.
+**Change 1: the short-horizon forecast skill does not survive.** AR Change now
+fails to beat a constant "always calm" classifier at every horizon. AR Baseline
+is essentially at the baseline (−0.08pp, −0.30pp, +0.11pp).
+
+Figure 3 (`dominant_regime_forecast_eval.csv`): AR 0.851 vs RW 0.826, against an
+always-calm baseline of 0.857 — the AR model beats the random walk but neither
+beats the trivial classifier.
+
+Figure 4 backtest (`ANN_FACTOR` = 248.48), all five from 2007-03-06:
+
+| Strategy | Sharpe | Ann. return | Max DD | 1st rebalance | Turnover |
+|---|---|---|---|---|---|
+| Oracle (infeasible) | **1.154** | 4.58% | −14.8% | 2007-03-30 | 0.0019 |
+| Unconditional | 0.799 | 2.63% | −14.7% | 2007-02-28 | 0.0007 |
+| AR Baseline | 0.753 | 3.33% | −18.5% | 2007-03-30 | 0.0011 |
+| AR Change | 0.753 | 3.31% | −18.2% | 2007-03-30 | 0.0030 |
+| Random Walk | 0.648 | 2.96% | −21.8% | 2007-03-30 | 0.0041 |
+
+Superseded Block 1 Sharpes (3,643-row grid): Oracle 0.718, Unconditional 0.449,
+AR Change 0.396, AR Baseline 0.373, RW 0.430.
+**Change 2: the AR strategies now beat the random walk** (0.753 vs 0.648),
+reversing Block 1. Both still fall short of the unconditional benchmark (0.799),
+and both carry ~4pp worse drawdown.
+
+**What survives both grids:** the infeasible Oracle clears the unconditional
+benchmark decisively (1.154 vs 0.799), so the regime signal carries real
+economic value; and no feasible forecast converts that into a Sharpe improvement
+over unconditional max-Sharpe allocation.
 
 Figure 4 backtest, **final** (`ANN_FACTOR` = 144.40, one-sided inputs, after both
 the `orig_idx` fix and the regime-portfolio history fix). All five evaluated from
@@ -445,32 +672,12 @@ the `orig_idx` fix and the regime-portfolio history fix). All five evaluated fro
 | AR Change | 0.396 | 1.32% | −14.5% | 2008-04-30 | 0.0036 |
 | AR Baseline | 0.373 | 1.25% | −14.2% | 2008-04-30 | 0.0026 |
 
-Superseded numbers, retained for the record:
+Sharpe progression across every stage of the revision (each row supersedes the
+one above; only the last is current):
 
-| Stage | Oracle | Uncond. | AR Change | AR Base | RW | Max DD (regime strats) |
+| Stage | Grid | Oracle | Uncond. | AR Change | AR Base | RW |
 |---|---|---|---|---|---|---|
-| Before `orig_idx` fix | 0.256 | 0.449 | 0.181 | 0.159 | 0.092 | −26.9% (all identical) |
-| After `orig_idx`, before slice fix | 0.545 | 0.449 | 0.297 | 0.271 | 0.233 | −19.5 to −20.1% |
-| **Final** | **0.718** | 0.449 | 0.396 | 0.373 | 0.430 | −14.2 to −14.6% |
-
-**Interpretation.** The ordering is coherent: the infeasible Oracle sits well
-clear at the top (0.718), as an upper bound should, and every regime-aware
-strategy now improves on drawdown relative to the earlier frozen-portfolio runs.
-
-The honest reading is unchanged in substance and sharper in detail:
-
-- The regime signal carries **real economic value** — perfect foresight of it
-  (Oracle 0.718) beats the unconditional benchmark (0.449) decisively, on both
-  Sharpe and drawdown.
-- **No feasible forecast captures it.** AR Change (0.396) and AR Baseline
-  (0.373) both fall short of Unconditional, at 4-5x its turnover and ~3pp worse
-  drawdown.
-- **The AR models do not beat the random walk** (0.430). RW now edges out both,
-  which is consistent with Figure 2: forecast skill is short-horizon only, and
-  the backtest rebalances monthly at a 21-observation horizon — precisely where
-  Figure 2 shows AR Change *losing* to the always-calm baseline (−2.97pp).
-
-This is a coherent story to report: the regimes are real and economically
-meaningful, but at the monthly rebalancing horizon the paper's AR forecasts add
-nothing over a random walk, and regime-aware allocation does not beat an
-unconditional max-Sharpe portfolio after costs.
+| Before `orig_idx` fix | 3,643 | 0.256 | 0.449 | 0.181 | 0.159 | 0.092 |
+| After `orig_idx`, before slice fix | 3,643 | 0.545 | 0.449 | 0.297 | 0.271 | 0.233 |
+| Block 1 final | 3,643 | 0.718 | 0.449 | 0.396 | 0.373 | 0.430 |
+| **Block 2 final (current)** | **6,269** | **1.154** | **0.799** | **0.753** | **0.753** | **0.648** |

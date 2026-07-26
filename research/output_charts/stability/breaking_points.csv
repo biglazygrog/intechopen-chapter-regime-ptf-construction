@@ -1,0 +1,8 @@
+tier,added_asset,n_assets,reasons,K_match_rate,prob_corr_mean,n_unstable_windows
+1,us_equities,7,K_match=0%,0.0,,0
+2,eu_equities,8,K_match=0%,0.0,,0
+3,em_equities,9,unstable_wins=9,0.8301886792452831,0.9535742994807003,9
+4,gov_long,10,K_match=0%,0.0,,0
+6,inflation_linked,12,"low_corr=0.67, unstable_wins=3",0.96,0.9753774236035676,3
+8,real_estate,14,unstable_wins=6,0.88,0.896741422582256,6
+9,energy,15,unstable_wins=9,0.82,0.9141275976614301,9

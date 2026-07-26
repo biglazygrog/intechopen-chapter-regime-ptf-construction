@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import linear_sum_assignment
 
 from models.gmm import Optimiser
+from core.utils import filter_synchronous_trading
 from core.config import OUTPUT_DIR as _BASE_OUT, TABLES_DIR
 
 OUTPUT_DIR = _BASE_OUT / "shrinkage_comparison"
@@ -232,9 +233,7 @@ def main():
         return
 
     print("Reading data...")
-    df = DataReader().read_retns().dropna()
-    df = df[(df != 0).all(axis=1)]
-    df = df[np.isfinite(df).all(axis=1)]
+    df = filter_synchronous_trading(DataReader().read_retns().dropna())
     X_raw = df.values
     dates = df.index
     print(f"  shape={df.shape}  range={dates[0].date()} to {dates[-1].date()}")

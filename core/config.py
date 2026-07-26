@@ -36,9 +36,7 @@ ONESIDED_FORECAST_PROBS_FILE = "daily_regime_probabilities_forecast_onesided.csv
 # ---------------------------------------------------------------------
 # Rolling-window GMM
 # ---------------------------------------------------------------------
-WINDOW_SIZE = 1250        # 1250 observations spanning variable calendar time
-                          # depending on data density (see ANN_FACTOR note below);
-                          # on this grid a window spans ~6.0-14.3 calendar years.
+WINDOW_SIZE = 1250        # 1250 observations ~ 5.0 years (range 4.96-5.24)
 STEP = 63                 # ~quarterly refit (63 observations, not 63 calendar days)
 K_CANDIDATES = [2, 3, 4, 5, 6, 7]
 SCALE_METHOD = "none"     # raw log returns into the GMM
@@ -83,9 +81,11 @@ TRANSACTION_COST = TRANSACTION_COST_BPS / 10_000
 PORT_MIN_TRAIN = 250      # observation count, not calendar days (see AR_MIN_TRAIN)
 REGIME_RECOMPUTE_FREQ = 63
 
-# 3643 filtered observations / 25.229 calendar years (2000-10-31 to 2026-01-23).
-# Grid is irregular (13-250 obs/yr); any scalar is an approximation.
-ANN_FACTOR = 144.40
+# 6269 filtered observations / 25.229 calendar years (2000-10-31 to 2026-01-23).
+# The grid is near-regular under the synchronous-trading filter (249-253 obs in
+# every full year); the residual ~3-5% shortfall against 252 is genuine
+# non-synchronous market holidays across the five market indices.
+ANN_FACTOR = 248.48
 
 # ---------------------------------------------------------------------
 # Asset universes

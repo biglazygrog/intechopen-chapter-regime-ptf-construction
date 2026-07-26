@@ -583,7 +583,7 @@ def main():
 
     print()
     print(f"Annualisation factor: {ANN_FACTOR} observations/year "
-          f"(irregular grid — see core/config.py).")
+          f"(see core/config.py).")
     print("Oracle is infeasible by construction; the other four strategies use "
           "one-sided regime probabilities only.")
 

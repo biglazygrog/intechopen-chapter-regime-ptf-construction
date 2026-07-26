@@ -20,6 +20,7 @@ import warnings
 
 from data.reader1 import DataReader
 from models.gmm import Optimiser
+from core.utils import filter_synchronous_trading
 from core.config import OUTPUT_DIR as _BASE_OUT
 
 OUTPUT_DIR = _BASE_OUT / "stability"
@@ -158,12 +159,11 @@ class RegimeStabilityAnalyzer:
         print(f"Assets: {assets}")
         print(f"{'='*70}")
 
-        # Prepare data with m_gmm.py-style cleaning (per-tier)
-        df_tier = df[assets].dropna()
-        # Remove rows with zeros
-        df_tier = df_tier[(df_tier != 0).all(axis=1)]
-        # Remove non-finite values
-        df_tier = df_tier[np.isfinite(df_tier).all(axis=1)]
+        # Synchronous-trading filter, per tier. Same single definition as the
+        # rest of the package: market indices must have traded; cash-like series
+        # are exempt (a zero there is a genuine near-zero return, not a stale
+        # quote). Exempt names absent from a given tier are ignored.
+        df_tier = filter_synchronous_trading(df[assets].dropna())
         X = df_tier.values
 
         # Run Optimiser

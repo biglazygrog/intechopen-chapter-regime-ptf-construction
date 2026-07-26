@@ -19,6 +19,7 @@ from models.regime_analysis import (
     regime_turnover_stats,
     cov_stability_diagnostics,
 )
+from core.utils import filter_synchronous_trading
 from core.config import (
     SHRINKAGE_TARGET, KAPPA_0, K_CANDIDATES,
     ROBUSTNESS_GRID as GRID, ROBUSTNESS_BASELINE_SPEC as BASELINE_SPEC,
@@ -94,9 +95,7 @@ def _run_one(X, dates, window_size, step, baseline_probs):
 
 def main():
     print("Reading data...")
-    df = DataReader().read_retns().dropna()
-    df = df[(df != 0).all(axis=1)]
-    df = df[np.isfinite(df).all(axis=1)]
+    df = filter_synchronous_trading(DataReader().read_retns().dropna())
     X = df.values
     dates = df.index
     print(f"  shape={df.shape}  range={dates[0].date()}..{dates[-1].date()}")

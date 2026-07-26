@@ -67,9 +67,9 @@ Measured on this dataset, every row except the last carries look-ahead:
 
 | Date | Windows averaged | Latest window ends | Look-ahead |
 |---|---|---|---|
-| 2000-10-31 | 1 | 2007-02-02 | 1249 obs |
-| 2007-02-02 | 20 | 2019-03-14 | 1197 obs |
-| 2016-09-21 | 20 | 2024-04-16 | 1202 obs |
+| 2000-10-31 | 1 | 2006-01-27 | 1249 obs |
+| 2006-01-27 | 20 | 2010-11-02 | 1197 obs |
+| 2013-01-16 | 20 | 2017-11-07 | 1210 obs |
 
 This series is the right object for **describing the estimated regime history**,
 which is what Figure 1 and Tables 3-4 do, and for the estimation-stability
@@ -91,7 +91,7 @@ touches `p_t`. This is stricter than the usual filtered convention, which would
 let the training window include `x_t` itself.
 
 Because no admissible model exists before the first window closes, the one-sided
-series **starts at observation index 1250 (2007-02-05)** and earlier dates are
+series **starts at observation index 1250 (2006-01-30)** and earlier dates are
 omitted, not back-filled. It runs to 2026-01-23 — further than the retrospective
 series, which stops at the last window end. The evaluation samples behind
 Figures 2-4 are correspondingly shorter, and each figure annotates its realised
@@ -181,32 +181,41 @@ All numerical configuration (window size, κ₀, transaction cost, etc.) lives i
 - The rolling GMM uses **previous-epoch shrinkage** for the mean prior with **κ₀ = 63.1** (target prior weight p ≈ 10 %). See Appendix κ₀ sensitivity for robustness.
 - The forecast-only K = 2 model is fit separately from the K-varying selection used for regime identification. All forecast and backtest artefacts consume the **one-sided** K = 2 series.
 
-### The observation grid is irregular
+### The synchronous-trading filter
 
-`DataReader` forward-fills prices onto a daily grid, so a series that did not
-update yields a zero log return. `pipeline.py` then keeps only rows where **all
-six assets moved** (`(df != 0).all(axis=1)`), which is what prevents the GMM from
-fitting on stale, artificially-zero cross-sections. The cost is a badly uneven
-grid:
+`DataReader` forward-fills prices onto a daily grid, so an index that did not
+update yields a log return of exactly zero. Such a row is not a real synchronous
+cross-section: the joint return vector carries a spurious zero, which would
+corrupt the cross-asset covariance structure the GMM relies on to identify
+regimes. The filter therefore keeps only rows on which every **market index**
+actually traded.
 
-- 12018 raw rows → 6605 after `dropna` → **3643** after the non-zero filter.
-- Observations per year range from **13 (2021)** and 26 (2013) to **250 (2024)**.
-- The first rows of the sample are month-ends, not business days.
+The single definition lives in `core.utils.filter_synchronous_trading` — it was
+previously duplicated at five call sites that could silently drift apart.
 
-Two consequences that the code and captions now state explicitly:
+**Cash is exempt.** `high_yield` is `LD12TRUU Index`, a Bloomberg US Short
+Treasury 1-12 Month index (displayed as "Cash"). At a pinned policy rate its true
+daily accrual falls below the stored price precision (~2.6bp on a level of 192
+held to 2 d.p.), so a recorded zero is a rounding artefact of a genuinely
+near-zero return, not a stale quote. Testing it alongside the market indices
+accounted for **96.8%** of all dropped rows and removed most of 2009-2016 and
+2020-2021 — including 85.2% of the EU sovereign debt crisis and 55.1% of the
+COVID drawdown, leaving 13 observations in 2021 and 26 in 2013. That earlier
+6-asset specification is superseded; see `REVISION_LOG.md`, items 8 and 9.
 
-- `WINDOW_SIZE = 1250` is **1250 observations spanning variable calendar time
-  depending on data density** — between **5.96 and 14.28 calendar years** on this
-  grid — not "5 years of business days" as previously commented. `STEP = 63` and
-  the `*_MIN_TRAIN` constants are likewise observation counts, not calendar days.
-- `ANN_FACTOR = 144.40`, derived as 3643 observations / 25.229 calendar years
-  (2000-10-31 to 2026-01-23), replaces the hardcoded 252. Any single scalar is an
-  approximation on a grid this uneven. Annualised means, volatilities, Sharpe
-  ratios and returns in Table 3 and Figure 4 therefore differ from versions of
-  this package that assumed 252.
+Under the corrected filter:
 
-The filter itself is deliberately unchanged in this revision; see
-`REVISION_LOG.md` (item F) for the reasoning.
+- 12018 raw rows → 6605 after `dropna` → **6269** after the filter.
+- Every full year retains **249-253** observations; the residual 3-5% shortfall
+  against 252 is genuine non-synchronous market holidays across five markets.
+- `WINDOW_SIZE = 1250` spans **4.96-5.24 calendar years** — so "approximately
+  five years" is accurate. `STEP = 63` and the `*_MIN_TRAIN` constants remain
+  observation counts, not calendar days.
+- `ANN_FACTOR = 248.48`, derived as 6269 observations / 25.229 calendar years
+  (2000-10-31 to 2026-01-23), replaces the hardcoded 252.
+
+Figure A.1 (`research.figures.figureA1_observations_per_year`) documents the
+grid.
 
 ### Reading the forecast hit rates
 

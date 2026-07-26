@@ -40,6 +40,7 @@ import pandas as pd
 
 from data.reader1 import DataReader
 from models.gmm import Optimiser
+from core.utils import filter_synchronous_trading
 from core.config import (
     K_CANDIDATES, WINDOW_SIZE, STEP, SCALE_METHOD,
     MAX_ITER, TOL, REG_COVAR, RANDOM_STATE,
@@ -57,11 +58,8 @@ CUT_FRACTIONS = [0.45, 0.70, 0.88]
 
 
 def _load_returns():
-    """Identical filtering to research.analysis.pipeline."""
-    df = DataReader().read_retns().dropna()
-    df = df[(df != 0).all(axis=1)]
-    df = df[np.isfinite(df).all(axis=1)]
-    return df
+    """Identical filtering to research.analysis.pipeline (shared helper)."""
+    return filter_synchronous_trading(DataReader().read_retns().dropna())
 
 
 def _build(window_size, step, k_candidates):

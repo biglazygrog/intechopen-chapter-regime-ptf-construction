@@ -31,7 +31,9 @@ from statsmodels.tsa.ar_model import AutoReg
 from data.reader1 import DataReader
 from models.gmm import Optimiser
 from models.regime_analysis import RegimeDistributionalAnalysis
-from core.utils import hard_labels_from_daily_probs, logit, inv_logit
+from core.utils import (
+    hard_labels_from_daily_probs, logit, inv_logit, filter_synchronous_trading,
+)
 from core.config import (
     K_CANDIDATES, WINDOW_SIZE, STEP, SCALE_METHOD,
     MAX_ITER, TOL, REG_COVAR, RANDOM_STATE,
@@ -91,19 +93,14 @@ def main():
     print()
 
     # ----- Load data -----
-    df = DataReader().read_retns().dropna()
-    # Retain only business days on which ALL assets traded. DataReader ffills
-    # prices onto a daily grid, so a series that did not update produces a zero
-    # log return; requiring every asset to be non-zero drops those rows. This
-    # keeps the GMM from fitting on stale, artificially-zero cross-sections.
-    #
-    # Consequence: the surviving grid is irregular (12018 raw rows -> 6605 after
-    # dropna -> 3643 here; 13 observations in 2021 against 250 in 2024), so
-    # WINDOW_SIZE=1250 spans ~6.0-14.3 calendar years depending on where it
-    # starts, and ANN_FACTOR is 144.40 rather than 252. The filter itself is
-    # deliberately unchanged in this revision — see REVISION_LOG.md, item F.
-    df = df[(df != 0).all(axis=1)]
-    df = df[np.isfinite(df).all(axis=1)]
+    # Retain only business days on which every MARKET INDEX actually traded.
+    # DataReader ffills prices onto a daily grid, so an index that did not
+    # update yields a zero log return; such a row is not a real synchronous
+    # cross-section and would corrupt the covariance structure the GMM uses to
+    # identify regimes. Cash (LD12TRUU) is exempt — at a pinned policy rate its
+    # zero is an economically genuine near-zero return, not a stale quote.
+    # Single definition lives in core.utils; see REVISION_LOG.md items 8 and 9.
+    df = filter_synchronous_trading(DataReader().read_retns().dropna())
     X = df.values
     dates = df.index
     print(f"Data shape: {df.shape}  range: {dates[0].date()} → {dates[-1].date()}")
