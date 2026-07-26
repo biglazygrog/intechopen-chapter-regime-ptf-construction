@@ -146,6 +146,70 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 *Newest first. One entry per working session, written before every commit and at
 the end of every session even if nothing was committed.*
 
+### 2026-07-26 — Block 2, Phase 2 (draft text) — BLOCKED, resume here
+
+**Done.** Drafted the Section 3.1 filter-disclosure text. Author approved it
+with two corrections I raised against the brief:
+
+1. The brief's asset list read "(equities, government bonds, corporate bonds,
+   commodities, cash proxy)". Wrong on two counts — **gold** was missing and the
+   cash proxy was wrongly included, which would have contradicted the very next
+   clause stating cash is retained unconditionally. The five *tested* assets are
+   equities, government bonds, IG credit, commodities and gold.
+2. The "3.1-5.0%" drop-rate band holds **from 2002 onward**, not across all
+   years: 2001 is 11.1%, and 2000 (95.4%) / 2026 (11.8%) are partial years.
+
+Author left the final-sentence split to my judgement; I took the split (the
+unsplit version ran to five clauses).
+
+**APPROVED FINAL TEXT** — insert immediately after the sentence ending
+"...and runs to January 2026" in Section 3.1:
+
+> Observations are retained only on days where all five market indices — global
+> equities, government bonds, investment-grade corporate credit, commodities and
+> gold — recorded a non-zero log return, while the short-duration Treasury
+> series used as a cash proxy (LD12TRUU) is retained unconditionally regardless
+> of its return. This asymmetry is deliberate: because prices are forward-filled
+> onto a common daily grid, a market index that did not update its price yields a
+> return of exactly zero, and admitting such a day would insert a spurious zero
+> into the cross-asset return vector and so distort the covariance estimates from
+> which the mixture model identifies regimes. For the cash proxy the same zeros
+> carry the opposite meaning — those that dominate the zero-interest-rate era of
+> approximately 2009–2016 and 2021 reflect genuine near-zero accrual at the
+> policy-rate floor rather than price staleness — so retaining them is
+> economically correct. The filter removes 336 of 6,605 observations, leaving
+> 6,269, a drop rate of 5.1% that is distributed near-uniformly at between 3.1%
+> and 5.0% in every year from 2002 onward and is therefore consistent with
+> genuine cross-market holiday mismatches rather than the systematic exclusion of
+> any particular period. Observation counts average approximately 250 per year
+> across the sample, and all window and horizon references in this paper are
+> stated in observation counts rather than calendar days. The annual distribution
+> is shown in Figure A.1.
+
+**BLOCKED — the chapter document does not exist in this environment.** Asked to
+write the text into the manuscript as a tracked insertion. Searched the repo,
+the `/workspaces` tree, the home directory, the whole filesystem (`find / -xdev`)
+and every file ever added in git history across all branches: **no `.docx`,
+`.doc`, `.odt`, `.tex` or `.rtf` anywhere**. `manuscript_changes_v2.docx` has
+never existed in this codespace. The chapter is presumably local to the author's
+machine in Word. Nothing was created, per instruction.
+
+Note for whoever resumes: there is also no "previous tracked change format" to
+match — no chapter document has been edited in this project at any point.
+
+Second constraint if the file is supplied: `.docx` tracked changes are `w:ins`
+elements in OOXML, and `python-docx` has no API for them. Doing it properly
+means hand-editing `word/document.xml` inside the zip, which Word validates
+strictly. If we go that route, work on a copy first and confirm it opens and
+renders correctly in Word before replacing the original.
+
+**Next — pick one:**
+1. Author pastes the approved text into Word with Track Changes on. Fastest,
+   correct revision metadata, zero risk to the file. Text is above.
+2. Author copies the `.docx` into the workspace and gives the path; I do the
+   OOXML insertion on a copy for verification first.
+3. Point me at the document via a connector, if one is set up.
+
 ### 2026-07-26 — Block 2, session 4 (option (a) implementation)
 
 **Done.** Implemented option (a) — the synchronous-trading filter now tests the
