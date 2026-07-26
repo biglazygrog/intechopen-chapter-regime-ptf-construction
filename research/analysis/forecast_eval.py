@@ -19,7 +19,7 @@ from sklearn.metrics import roc_auc_score
 
 from core.config import (
     OUTPUT_DIR, AR_HORIZONS, AR_MAX_LAG, AR_MIN_TRAIN, AR_REFIT_FREQ,
-    TARGET_REGIME, HV_THRESHOLD,
+    TARGET_REGIME, HV_THRESHOLD, FORECAST_K, ONESIDED_FORECAST_PROBS_FILE,
 )
 
 
@@ -273,6 +273,13 @@ def evaluate_ar_change_multihorizon(
         hit_baseline = ((df_h["p_baseline_th"] >= 0.5) == (df_h["z_th"] == 1)).mean()
         hit_rw = ((df_h["p_rw_th"] >= 0.5) == (df_h["z_th"] == 1)).mean()
 
+        # Always-calm baseline: the accuracy of the trivial constant classifier
+        # that never predicts the high-vol regime. The high-vol state is rare,
+        # so raw hit rates near 0.87 can look impressive while being at or below
+        # what predicting "calm" every day already achieves. Any hit rate must
+        # be read against this number.
+        hit_always_calm = (df_h["z_th"] == 0).mean()
+
         # High-vol detection at threshold 0.5
         high_vol_mask = df_h["z_th"] == 1
         if high_vol_mask.sum() > 0:
@@ -313,6 +320,8 @@ def evaluate_ar_change_multihorizon(
             "hit_rate_change": hit_change,
             "hit_rate_baseline": hit_baseline,
             "hit_rate_rw": hit_rw,
+            "hit_rate_always_calm": hit_always_calm,
+            "hit_gain_change_vs_always_calm": hit_change - hit_always_calm,
             # High-vol detection
             "highvol_change": highvol_change,
             "highvol_baseline": highvol_baseline,
@@ -341,14 +350,34 @@ def main():
     print("=" * 70)
     print()
 
-    # Load daily regime probabilities
-    probs_path = OUTPUT_DIR / "daily_regime_probabilities.csv"
+    # Load the ONE-SIDED K=2 regime probabilities.
+    #
+    # This must NOT be daily_regime_probabilities.csv. That file is (a)
+    # retrospective — each date embeds ~1200 observations of future returns —
+    # and (b) K-varying, where under trace ordering TARGET_REGIME="p_1" is the
+    # MIDDLE of three regimes rather than the high-vol one it is documented to
+    # be. Both defects are load-bearing for Figure 2.
+    probs_path = OUTPUT_DIR / ONESIDED_FORECAST_PROBS_FILE
     if not probs_path.exists():
         print(f"Error: {probs_path} not found. Run pipeline.py first.")
         return
 
-    daily_probs = pd.read_csv(probs_path, index_col=0, parse_dates=True)
-    print(f"Loaded {len(daily_probs)} days of regime probabilities")
+    daily_probs = pd.read_csv(probs_path, index_col=0, parse_dates=True, comment="#")
+
+    # Structural guard — refuse to run on a K-varying series, so the file above
+    # cannot be swapped back for the retrospective one without this failing.
+    n_regimes = len([c for c in daily_probs.columns if c.startswith("p_")])
+    if n_regimes != FORECAST_K:
+        raise ValueError(
+            f"{probs_path.name} has {n_regimes} regime columns but FORECAST_K="
+            f"{FORECAST_K}. TARGET_REGIME={TARGET_REGIME!r} is only the high-vol "
+            f"regime in the K={FORECAST_K} trace-ordered fit; running against a "
+            f"K-varying series would silently forecast a different regime."
+        )
+
+    print(f"Loaded {len(daily_probs)} days of ONE-SIDED K={FORECAST_K} regime "
+          f"probabilities ({daily_probs.index[0].date()} to {daily_probs.index[-1].date()})")
+    print("  [one-sided: no probability uses a return dated after its own date]")
     print()
 
     results = evaluate_ar_change_multihorizon(
@@ -431,6 +460,38 @@ def main():
     print(hv_df.to_string(index=False))
 
     print("\n" + "-" * 70)
+    print("Panel C2: Hit Rate vs Always-Calm Baseline")
+    print("-" * 70)
+    print("The high-vol regime is rare, so a constant 'always calm' classifier")
+    print("already scores highly. Read every hit rate against this column.")
+
+    calm_table = []
+    for h in horizons:
+        if h not in summary.index:
+            continue
+        row = summary.loc[h]
+        calm_table.append({
+            "Horizon": f"{h}-day",
+            "Always-Calm": f"{row['hit_rate_always_calm']*100:.2f}%",
+            "AR Change": f"{row['hit_rate_change']*100:.2f}%",
+            "AR Baseline": f"{row['hit_rate_baseline']*100:.2f}%",
+            "Random Walk": f"{row['hit_rate_rw']*100:.2f}%",
+            "Change - Always-Calm": f"{row['hit_gain_change_vs_always_calm']*100:+.2f}pp",
+        })
+
+    calm_df = pd.DataFrame(calm_table)
+    print(calm_df.to_string(index=False))
+
+    for h in horizons:
+        if h not in summary.index:
+            continue
+        row = summary.loc[h]
+        gain = row["hit_gain_change_vs_always_calm"] * 100
+        verdict = "BEATS" if gain > 0 else "DOES NOT BEAT"
+        print(f"  h={h:>2}: AR Change {verdict} the always-calm baseline "
+              f"({gain:+.2f}pp)")
+
+    print("\n" + "-" * 70)
     print("Panel D: Diebold-Mariano Tests")
     print("-" * 70)
 
@@ -482,6 +543,10 @@ def main():
         "AUC (Baseline)": [f"{summary.loc[h, 'auc_baseline']:.3f}" for h in horizons if h in summary.index],
         "AUC (RW)": [f"{summary.loc[h, 'auc_rw']:.3f}" for h in horizons if h in summary.index],
         "HighVol Det.": [f"{summary.loc[h, 'highvol_change']*100:.1f}%" for h in horizons if h in summary.index],
+        # E: hit rate is uninterpretable without the trivial-classifier baseline.
+        "Hit Rate (Change)": [f"{summary.loc[h, 'hit_rate_change']*100:.1f}%" for h in horizons if h in summary.index],
+        "Hit Rate (Always-Calm)": [f"{summary.loc[h, 'hit_rate_always_calm']*100:.1f}%" for h in horizons if h in summary.index],
+        "Hit Gain vs Always-Calm": [f"{summary.loc[h, 'hit_gain_change_vs_always_calm']*100:+.1f}pp" for h in horizons if h in summary.index],
     })
 
     diss_table.to_csv(OUTPUT_DIR / "ar_change_dissertation_table.tsv", sep="\t", index=False)
@@ -493,6 +558,7 @@ def main():
             brier_df.to_excel(writer, sheet_name="Brier", index=False)
             auc_df.to_excel(writer, sheet_name="AUC", index=False)
             hv_df.to_excel(writer, sheet_name="HighVol_Detection", index=False)
+            calm_df.to_excel(writer, sheet_name="Hit_vs_AlwaysCalm", index=False)
             dm_df.to_excel(writer, sheet_name="DM_Tests", index=False)
             diss_table.to_excel(writer, sheet_name="Dissertation_Table", index=False)
         print(f"Saved: ar_change_multihorizon_tables.xlsx")
@@ -515,6 +581,9 @@ def main():
         print(f"  AUC: Change={row['auc_change']:.3f} vs Baseline={row['auc_baseline']:.3f} ({auc_improvement:+.1f}pp)")
         print(f"  Brier Skill vs RW: Change={row['brier_skill_change_vs_rw']*100:.1f}% vs Baseline={row['brier_skill_baseline_vs_rw']*100:.1f}%")
         print(f"  High-vol detection: Change={row['highvol_change']*100:.1f}% vs Baseline={row['highvol_baseline']*100:.1f}%")
+        print(f"  Hit rate: Change={row['hit_rate_change']*100:.2f}% vs "
+              f"always-calm baseline={row['hit_rate_always_calm']*100:.2f}% "
+              f"({row['hit_gain_change_vs_always_calm']*100:+.2f}pp)")
 
         if row['dm_pvalue_vs_baseline'] < 0.05 and row['change_better_than_baseline']:
             print(f"  AR Change SIGNIFICANTLY better than AR Baseline (p={row['dm_pvalue_vs_baseline']:.4f})")

@@ -755,6 +755,10 @@ class Optimiser:
         self.kappa_age_scale = bool(kappa_age_scale)
 
         self.index_: Optional[pd.Index] = None
+        # Retained by fit() so get_filtered_probabilities() can re-evaluate the
+        # E-step on out-of-window observations without the caller having to
+        # re-supply (and risk mismatching) the design matrix.
+        self.X_: Optional[np.ndarray] = None
 
         self.fits: List[Dict] = []
         self.window_ends_: List[int] = []
@@ -1014,6 +1018,7 @@ class Optimiser:
         T, d = X.shape
 
         self.index_ = pd.Index(index) if index is not None else pd.RangeIndex(T)
+        self.X_ = X
 
         self.fits.clear()
         self.window_ends_.clear()
@@ -1113,7 +1118,16 @@ class Optimiser:
         return self
 
     def get_probs_over_time(self) -> pd.DataFrame:
-        """Per-window regime probabilities."""
+        """RETROSPECTIVE per-window regime probabilities — NOT one-sided.
+
+        Each row is ``resp.mean(axis=0)``: the average in-sample responsibility
+        over a whole window, stamped at that window's END date. It therefore
+        summarises the preceding ``window_size`` observations as classified by a
+        model fitted on all of them, and is not a point-in-time quantity.
+
+        Descriptive use only. For a one-sided series see
+        :meth:`get_filtered_probabilities`.
+        """
         assert len(self.fits) > 0, "Call fit() first."
 
         maxK = max(f["K"] for f in self.fits)
@@ -1133,7 +1147,42 @@ class Optimiser:
         return pd.DataFrame(rows, index=idx, columns=cols)
 
     def get_daily_probabilities(self) -> pd.DataFrame:
-        """Daily regime probabilities."""
+        """RETROSPECTIVE (smoothed, full-sample) daily regime probabilities.
+
+        *** THIS SERIES CONTAINS LOOK-AHEAD BIAS BY CONSTRUCTION. ***
+
+        The value at date ``t`` is the unweighted mean of the in-sample E-step
+        responsibilities of EVERY window containing ``t``:
+
+            p_t = mean over w in W(t) of
+                  P(regime | x_t, theta_hat_w(x_{s_w} ... x_{s_w + window_size - 1}))
+            W(t) = { w : s_w <= t <= s_w + window_size - 1 }
+
+        Two distinct sources of future information enter:
+
+        1. Within a window, ``resp`` is the posterior evaluated on the SAME data
+           that produced ``theta_hat``, so the responsibility at the window's
+           left edge is conditioned on returns up to ``window_size - 1``
+           observations later. K itself is also chosen by BIC over the whole
+           window.
+        2. Across windows, dates are averaged over every overlapping fit,
+           including fits that BEGIN after ``t``. With window_size=1250 and
+           step=63, ~20 windows cover each date and the latest of them trains on
+           returns up to ~1200 observations after ``t``.
+
+        Windows are weighted equally regardless of whether ``t`` sits at their
+        left edge (maximum look-ahead) or right edge (none).
+
+        Note also that windows selecting different K are padded into a common
+        ``maxK`` column set at line ``arr[:, :K] = resp`` and then averaged, so
+        under trace ordering the p_1 of a K=2 fit (highest variance) is averaged
+        with the p_1 of a K=3 fit (middle variance).
+
+        Use for descriptive figures only (e.g. Figure 1) and for estimation-
+        stability diagnostics (Tables A.1, A.2), where the smoothed fit is the
+        object of interest. For ANY forecast or backtest input use
+        :meth:`get_filtered_probabilities`.
+        """
         assert len(self.fits) > 0, "Call fit() first."
 
         maxK = max(f["K"] for f in self.fits)
@@ -1155,6 +1204,149 @@ class Optimiser:
         out = pd.concat(frames)
         out = out.groupby(level=0).mean()
         return out.sort_index()
+
+    def get_filtered_probabilities(
+        self,
+        X: Optional[np.ndarray] = None,
+        align_labels: bool = False,
+    ) -> pd.DataFrame:
+        """ONE-SIDED daily regime probabilities. Contains NO look-ahead.
+
+        For each date ``t`` the probability is produced by a single model whose
+        estimation window ended STRICTLY BEFORE ``t``:
+
+            p_t   = model_{w(t)}.predict_proba(x_t)
+            w(t)  = argmax_w { e_w : e_w < t }
+
+        where ``e_w = window_end_indices_[w]``. Model ``w``, trained on
+        ``[s_w, e_w]``, therefore serves exactly the dates
+        ``e_w + 1 ... e_{w+1}`` (and the final model serves through the end of
+        the sample). Only the E-step is evaluated on those dates — no refitting
+        occurs, and no observation dated after ``t`` touches ``p_t``.
+
+        This is stricter than the usual "filtered" convention, which would allow
+        the model's training data to include ``x_t`` itself. Here the parameters
+        come from data strictly before ``t`` and only the observation ``x_t`` is
+        contemporaneous, so the series is unambiguously investable.
+
+        Contrast with :meth:`get_daily_probabilities`, which averages ~20
+        overlapping in-sample fits per date and embeds ~1200 observations of
+        future information.
+
+        Parameters
+        ----------
+        X : ndarray, optional
+            Design matrix. Defaults to the matrix passed to :meth:`fit`.
+        align_labels : bool, default False
+            When True, Hungarian-align each window's components to the previous
+            window's fitted means before emitting, carrying regime identity
+            across refits.
+
+            Default is False deliberately. ``order_components=True`` with
+            ``order_mode="trace"`` already imposes a deterministic, semantically
+            meaningful ordering (component 0 = lowest trace(Sigma) = calmest),
+            and this is the convention every other artefact in the package —
+            including ``TARGET_REGIME`` — relies on. Mean-distance Hungarian
+            matching is NOT reliable here: regime means are all close to zero,
+            so a mismatch would silently override the trustworthy variance
+            ordering. Enable only for diagnostics.
+
+        Returns
+        -------
+        DataFrame indexed by date, columns ``p_0 ... p_{maxK-1}``. Length is
+        ``T - window_size``; the first emitted date is index ``window_size``.
+        Dates at or before the first window end are NOT emitted — no admissible
+        model exists for them — and are not back-filled.
+
+        Notes
+        -----
+        When K varies across refits, a window with K < maxK writes zeros into
+        the unused trailing columns. Unlike the retrospective series these are
+        never averaged with other-K fits (each date has exactly one source
+        model), but the meaning of a given column still shifts between refits
+        of different K. For that reason the K-varying one-sided series is for
+        descriptive/reviewer inspection only; all forecast and backtest inputs
+        use the fixed-K=2 fit, where the trace ordering is stable.
+        """
+        assert len(self.fits) > 0, "Call fit() first."
+
+        X = self.X_ if X is None else np.asarray(X, dtype=float)
+        if X is None:
+            raise ValueError(
+                "No design matrix available — pass X explicitly or call fit() first."
+            )
+        T = len(X)
+        if T != len(self.index_):
+            raise ValueError(
+                f"X has {T} rows but the fitted index has {len(self.index_)}."
+            )
+
+        ends = list(self.window_end_indices_)
+        maxK = max(f["K"] for f in self.fits)
+        cols = [f"p_{k}" for k in range(maxK)]
+
+        ref_means: Optional[np.ndarray] = None
+        frames: List[pd.DataFrame] = []
+
+        for w, (fit, e_w) in enumerate(zip(self.fits, ends)):
+            lo = e_w + 1                                  # strictly after training data
+            hi = ends[w + 1] if w + 1 < len(ends) else T - 1
+            if lo > hi:
+                continue
+
+            model = fit["model"]
+            K = fit["K"]
+            resp = model.predict_proba(X[lo : hi + 1])    # E-step only, no refit
+
+            if align_labels and ref_means is not None:
+                # Hungarian-match current components (rows) to reference slots
+                # (cols) on Euclidean mean distance, then permute so that output
+                # column c carries the current component matched to slot c.
+                cost = np.linalg.norm(
+                    model.means_[:, None, :] - ref_means[None, :, :], axis=2
+                )
+                rows_, cols_ = linear_sum_assignment(cost)
+
+                perm = np.full(K, -1, dtype=int)
+                for r, c in zip(rows_.tolist(), cols_.tolist()):
+                    if c < K:
+                        perm[c] = r
+                # Any slot left unmatched (K changed between refits) takes an
+                # as-yet-unused component, so perm is always a true permutation.
+                unused = [r for r in range(K) if r not in set(perm.tolist())]
+                for j in range(K):
+                    if perm[j] == -1:
+                        perm[j] = unused.pop(0)
+
+                resp = resp[:, perm]
+                ref_means = model.means_[perm].copy()
+            else:
+                ref_means = model.means_.copy()
+
+            arr = np.zeros((hi - lo + 1, maxK))
+            arr[:, :K] = resp
+            frames.append(
+                pd.DataFrame(arr, index=self.index_[lo : hi + 1], columns=cols)
+            )
+
+        out = pd.concat(frames).sort_index()
+
+        # --- T3: structural no-look-ahead assertions (cheap, always on) ------
+        assert not out.index.duplicated().any(), (
+            "date -> model map is not a strict partition; a date is served by "
+            "more than one model."
+        )
+        first_pos = self.index_.get_loc(out.index[0])
+        assert first_pos > ends[0], (
+            f"first emitted position {first_pos} is not strictly after the "
+            f"first window end {ends[0]}."
+        )
+        # Blocks telescope: sum_w (e_{w+1} - e_w) + (T-1 - e_last) = (T-1) - e_0.
+        expected = (T - 1) - ends[0]
+        assert len(out) == expected, (
+            f"expected {expected} one-sided rows, got {len(out)}."
+        )
+        return out
 
     def get_correlation_matrices(self) -> List[List[np.ndarray]]:
         """For each window, return list of correlation matrices per regime."""

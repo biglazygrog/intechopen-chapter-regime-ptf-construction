@@ -4,6 +4,16 @@ Table 3 — Regime-Conditional Moments and Downside Risk.
 Reads paper_profiles_raw.csv produced by pipeline.py and emits the
 dissertation-formatted table (annualised mean & vol, per-day VaR/ES/quantiles).
 
+Two things to note when reading this table:
+
+1. Regime labels are RETROSPECTIVE (full-sample smoothed). This is deliberate —
+   the table is a descriptive characterisation of the estimated regimes, not an
+   investable signal. See REVISION_LOG.md.
+2. Annualisation uses ANN_FACTOR = 144.40 observations/year, derived from the
+   actual filtered grid (3643 observations / 25.229 calendar years), not the
+   252 business days previously assumed. Annualised means and volatilities
+   therefore differ from earlier versions of this table.
+
 Run:  python -m research.analysis.moments
 """
 from pathlib import Path
@@ -59,6 +69,8 @@ def main():
     fmt.to_csv(TABLES_DIR / "table3_regime_moments.tsv", sep="\t", index=False)
 
     print("Table 3 — Regime-Conditional Moments and Downside Risk")
+    print(f"Annualisation: ANN_FACTOR = {ANN_FACTOR} observations/year "
+          f"(irregular grid). Regime labels are retrospective/full-sample.")
     print(fmt.to_string(index=False))
 
 

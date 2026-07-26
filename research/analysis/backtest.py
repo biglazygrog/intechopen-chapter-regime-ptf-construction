@@ -3,10 +3,15 @@ Figure 4 — Portfolio backtest (4-panel: cumulative returns, Sharpe bars, drawd
 
 Five strategies:
 - Unconditional max-Sharpe (expanding)
-- Filtered Oracle (uses future filtered probabilities — infeasible, upper bound)
+- Oracle (averages REALISED future probabilities — infeasible, upper bound)
 - AR Baseline (logit-level AR forecast of the high-vol probability)
 - AR Change (delta-logit AR forecast)
 - Random Walk
+
+All regime inputs come from the ONE-SIDED K=2 probability series, so the four
+non-Oracle strategies are genuinely investable: no probability they consume uses
+a return dated after its own date. The Oracle is the only strategy that looks
+forward, and does so deliberately as an upper bound.
 
 Run:  python -m research.analysis.backtest
 """
@@ -17,7 +22,10 @@ import matplotlib.pyplot as plt
 from statsmodels.tsa.ar_model import AutoReg
 from scipy.optimize import minimize
 
-from core.config import OUTPUT_DIR, FIGURES_DIR, TRANSACTION_COST
+from core.config import (
+    OUTPUT_DIR, FIGURES_DIR, TRANSACTION_COST, ANN_FACTOR, FORECAST_K,
+    ONESIDED_FORECAST_PROBS_FILE,
+)
 
 
 # =============================================================================
@@ -71,9 +79,9 @@ def optimize_max_sharpe(mu, cov, rf=0.0, max_weight=0.40):
         return np.ones(n) / n
 
 
-def compute_metrics(net_returns, turnover_list):
+def compute_metrics(net_returns):
     """net_returns are LOG returns."""
-    ann_factor = 252
+    ann_factor = ANN_FACTOR
     total_return = np.exp(net_returns.sum()) - 1
     n_years = len(net_returns) / ann_factor
     ann_return = (1 + total_return) ** (1 / n_years) - 1 if n_years > 0 else 0
@@ -112,6 +120,7 @@ def backtest_unconditional_expanding(returns, min_train, transaction_cost):
     port_returns = []
     tc_list = []
     turnover_list = []
+    first_rebalance = None
 
     for t, date in enumerate(dates):
         daily_ret = returns.iloc[t].values
@@ -121,9 +130,11 @@ def backtest_unconditional_expanding(returns, min_train, transaction_cost):
         current_weights = new_values / new_values.sum()
 
         if date in rebalance_set and t >= min_train:
+            if first_rebalance is None:
+                first_rebalance = date
             past_returns = returns.iloc[:t+1]
-            mu = past_returns.mean().values * 252
-            cov = past_returns.cov().values * 252
+            mu = past_returns.mean().values * ANN_FACTOR
+            cov = past_returns.cov().values * ANN_FACTOR
             target_weights = optimize_max_sharpe(mu, cov)
 
             turnover = np.abs(target_weights - current_weights).sum() / 2
@@ -139,9 +150,16 @@ def backtest_unconditional_expanding(returns, min_train, transaction_cost):
     tc_series = pd.Series(tc_list, index=dates)
     net_returns = port_ret_series - tc_series
     cumulative = np.exp(net_returns.cumsum())
-    metrics = compute_metrics(net_returns, turnover_list)
+    metrics = compute_metrics(net_returns)
 
-    return {"net_returns": net_returns, "cumulative": cumulative, "metrics": metrics}
+    return {
+        "net_returns": net_returns,
+        "cumulative": cumulative,
+        "metrics": metrics,
+        "mean_turnover": float(np.mean(turnover_list)) if turnover_list else 0.0,
+        "first_rebalance": first_rebalance,
+        "start_date": dates[0],
+    }
 
 
 def compute_regime_portfolios_expanding(returns, probs, end_idx):
@@ -159,14 +177,43 @@ def compute_regime_portfolios_expanding(returns, probs, end_idx):
         mu = weighted_returns.sum(axis=0) / weights.sum()
         centered = ret_slice.values - mu
         cov = (centered.T * weights) @ centered / weights.sum()
-        mu_ann = mu * 252
-        cov_ann = cov * 252
+        mu_ann = mu * ANN_FACTOR
+        cov_ann = cov * ANN_FACTOR
         regime_portfolios[k] = optimize_max_sharpe(mu_ann, cov_ann)
 
     return regime_portfolios
 
 
 def backtest_regime_aware_expanding(returns, probs, forecast_probs, prob_column, min_train, transaction_cost, recompute_freq=63):
+    # Position in the FULL returns history, captured BEFORE the common_dates
+    # restriction below.
+    #
+    # This used to be `returns.index.get_loc(date)` evaluated *after* the
+    # reassignment, which made orig_idx identically equal to t — so the
+    # `orig_idx >= min_train` gate counted min_train observations from the start
+    # of the restricted frame instead of from the start of history, i.e. it
+    # double-counted the warm-up that generate_ar_forecasts had already served.
+    # Benign while the probability series began in 2000, but once the one-sided
+    # series pushed the restricted frame to 2008-04-01 it delayed the first
+    # rebalance to 2010-09-29 — past the 2008 crash — freezing every regime
+    # strategy at equal weight through the only major crisis in the sample while
+    # the unconditional benchmark traded through it.
+    orig_pos = {d: i for i, d in enumerate(returns.index)}
+
+    # Full (pre-restriction) frames, retained so the regime-conditional moments
+    # can be estimated on ALL causal history available at each rebalance date.
+    #
+    # Previously the regime portfolios were estimated from the RESTRICTED frame,
+    # which restarts at the first forecast date. That gave the first recompute
+    # only ~16 observations (sum(p_1) = 4.2 < 10), tripping the fallback in
+    # compute_regime_portfolios_expanding and leaving the high-vol portfolio at
+    # equal weight for the first quarter — the quarter containing the 2008-07-14
+    # drawdown peak. The restriction exists to align the FORECAST signal, not to
+    # bound the estimation sample; using the full one-sided history is strictly
+    # more information and remains entirely causal.
+    returns_full = returns
+    probs_full = probs
+
     common_dates = returns.index.intersection(forecast_probs.index)
     returns = returns.loc[common_dates]
     probs = probs.loc[common_dates]
@@ -185,8 +232,10 @@ def backtest_regime_aware_expanding(returns, probs, forecast_probs, prob_column,
     turnover_list = []
     last_recompute = 0
 
+    first_rebalance = None
+
     for t, date in enumerate(dates):
-        orig_idx = returns.index.get_loc(date)
+        orig_idx = orig_pos[date]        # position in the FULL history
         daily_ret = returns.iloc[t].values
         new_values = current_weights * np.exp(daily_ret)
         port_ret = np.log(new_values.sum() / current_weights.sum())
@@ -194,8 +243,18 @@ def backtest_regime_aware_expanding(returns, probs, forecast_probs, prob_column,
         current_weights = new_values / new_values.sum()
 
         if date in rebalance_set and orig_idx >= min_train:
+            if first_rebalance is None:
+                first_rebalance = date
             if t - last_recompute >= recompute_freq or t == 0:
-                regime_portfolios = compute_regime_portfolios_expanding(returns, probs, orig_idx)
+                # Estimate on the FULL frames indexed by the full-history
+                # position. `orig_idx + 1` includes the current date: the
+                # rebalance happens at the end of `date`, after that day's return
+                # has already been applied above, so data through `date` is
+                # available. This also matches backtest_unconditional_expanding,
+                # which uses `returns.iloc[:t+1]`.
+                regime_portfolios = compute_regime_portfolios_expanding(
+                    returns_full, probs_full, orig_idx + 1
+                )
                 last_recompute = t
 
             p1 = forecasts.loc[date, prob_column]
@@ -216,9 +275,16 @@ def backtest_regime_aware_expanding(returns, probs, forecast_probs, prob_column,
     tc_series = pd.Series(tc_list, index=dates)
     net_returns = port_ret_series - tc_series
     cumulative = np.exp(net_returns.cumsum())
-    metrics = compute_metrics(net_returns, turnover_list)
+    metrics = compute_metrics(net_returns)
 
-    return {"net_returns": net_returns, "cumulative": cumulative, "metrics": metrics}
+    return {
+        "net_returns": net_returns,
+        "cumulative": cumulative,
+        "metrics": metrics,
+        "mean_turnover": float(np.mean(turnover_list)) if turnover_list else 0.0,
+        "first_rebalance": first_rebalance,
+        "start_date": dates[0],
+    }
 
 
 def generate_ar_forecasts(probs_df, horizon=21, min_train=252, refit_freq=21, max_lag=5):
@@ -258,13 +324,19 @@ def generate_ar_forecasts(probs_df, horizon=21, min_train=252, refit_freq=21, ma
             p_change = p[t]
 
         target_date = dates[t + horizon]
-        # Oracle = average realised p_1 over the upcoming holding period
-        # (forward 'horizon' trading days from target_date, truncated at data end)
+        # Oracle = average REALISED p_1 over the upcoming holding period
+        # (forward 'horizon' observations from target_date, truncated at data
+        # end). This is deliberately infeasible — it is the upper bound.
+        #
+        # Named p_1_oracle_fwd, not p_1_filtered: a *filtered* probability is
+        # one-sided by definition, and this is a forward average. The old name
+        # made the only look-ahead strategy in the backtest read like the
+        # look-ahead-free one.
         fwd_end = min(t + 2 * horizon, n)
         oracle_fwd = float(np.mean(p[t + horizon : fwd_end])) if fwd_end > t + horizon else float(p[t + horizon])
         results.append({
             "date": target_date,
-            "p_1_filtered": oracle_fwd,
+            "p_1_oracle_fwd": oracle_fwd,
             "p_1_current": p[t],
             "p_1_ar_baseline": p_baseline,
             "p_1_ar_change": p_change,
@@ -283,10 +355,34 @@ def main():
     print("=" * 70)
     print()
 
-    # Load regime probabilities and asset returns (log)
-    probs_path = OUTPUT_DIR / "daily_regime_probabilities.csv"
-    probs_df = pd.read_csv(probs_path, index_col=0, parse_dates=True)
-    print(f"Loaded {len(probs_df)} days of regime probabilities")
+    # Load the ONE-SIDED K=2 regime probabilities and asset returns (log).
+    #
+    # This single frame feeds BOTH consumers below, and both had to change:
+    #   1. generate_ar_forecasts(probs_df, ...)     — the AR/RW signal
+    #   2. compute_regime_portfolios_expanding(..., probs, orig_idx)
+    #        — the regime-conditional mu/cov behind every target weight
+    #
+    # (2) was the undisclosed contamination. It slices probs.iloc[:end_idx], so
+    # it *looks* causal, but with the retrospective series every value inside
+    # that slice was itself built from ~1200 observations of future returns.
+    # The regime-conditional moments at each rebalance therefore embedded
+    # returns from after the rebalance date, contaminating AR Baseline, AR
+    # Change and Random Walk — not just the Oracle, as the figure note implied.
+    probs_path = OUTPUT_DIR / ONESIDED_FORECAST_PROBS_FILE
+    probs_df = pd.read_csv(probs_path, index_col=0, parse_dates=True, comment="#")
+
+    n_regimes = len([c for c in probs_df.columns if c.startswith("p_")])
+    if n_regimes != FORECAST_K:
+        raise ValueError(
+            f"{probs_path.name} has {n_regimes} regime columns but FORECAST_K="
+            f"{FORECAST_K}. The backtest blends exactly two regime portfolios "
+            f"and assumes p_1 is the high-vol regime of the K={FORECAST_K} "
+            f"trace-ordered fit."
+        )
+
+    print(f"Loaded {len(probs_df)} days of ONE-SIDED K={FORECAST_K} regime "
+          f"probabilities ({probs_df.index[0].date()} to {probs_df.index[-1].date()})")
+    print("  [one-sided: no probability uses a return dated after its own date]")
 
     from data.reader1 import DataReader
     returns_df = DataReader().read_retns().dropna()
@@ -317,11 +413,13 @@ def main():
     mask = res_uncond["net_returns"].index.isin(forecast_df.index)
     res_uncond["net_returns"] = res_uncond["net_returns"][mask]
     res_uncond["cumulative"] = np.exp(res_uncond["net_returns"].cumsum())
-    res_uncond["metrics"] = compute_metrics(res_uncond["net_returns"], [0.01] * len(res_uncond["net_returns"]))
+    res_uncond["metrics"] = compute_metrics(res_uncond["net_returns"])
+    # Report the evaluation start, which is the masked start, not the fit start.
+    res_uncond["start_date"] = res_uncond["net_returns"].index[0]
 
-    print("  Filtered (Oracle)...")
+    print("  Oracle (uses future probabilities — infeasible)...")
     res_oracle = backtest_regime_aware_expanding(
-        returns_df, probs_df, forecast_df, "p_1_filtered", min_train, tc
+        returns_df, probs_df, forecast_df, "p_1_oracle_fwd", min_train, tc
     )
 
     print("  AR Baseline...")
@@ -444,11 +542,18 @@ def main():
     ax4.set_title("Panel D: Performance Summary", fontsize=11, fontweight="bold", y=0.95)
 
     # Add note
-    fig.text(0.5, 0.02,
-             "Note: Oracle uses future regime probabilities (infeasible). TC = 5bps.",
-             ha="center", fontsize=10, style="italic")
+    fig.text(
+        0.5, 0.02,
+        "Note: all strategies use one-sided regime probabilities (no look-ahead). "
+        "Oracle is the ONLY strategy using future regime probabilities "
+        "(infeasible upper bound). TC = 5bps.\n"
+        f"One-sided series starts {probs_df.index[0].date()}, so the evaluation "
+        f"sample is shorter than the retrospective series: "
+        f"{len(res_ar_change['net_returns'])} days from "
+        f"{res_ar_change['net_returns'].index[0].date()}.",
+        ha="center", fontsize=9, style="italic")
 
-    plt.tight_layout(rect=[0, 0.03, 1, 1])
+    plt.tight_layout(rect=[0, 0.07, 1, 1])
 
     fig.savefig(FIGURES_DIR / "figure4_backtest.png", dpi=150, bbox_inches="tight")
     fig.savefig(FIGURES_DIR / "figure4_backtest.pdf", bbox_inches="tight")
@@ -465,7 +570,22 @@ def main():
 
     for name in names:
         m = results[name]["metrics"]
-        print(f"{name:15} | Sharpe: {m['sharpe_ratio']:.3f} | Return: {m['ann_return']*100:.2f}% | Max DD: {m['max_drawdown']*100:.1f}%")
+        r = results[name]
+        turn = r.get("mean_turnover")
+        turn_s = f" | Turnover: {turn:.4f}" if turn is not None else ""
+        fr = r.get("first_rebalance")
+        fr_s = f" | 1st rebal: {fr.date()}" if fr is not None else " | 1st rebal: n/a"
+        sd = r.get("start_date")
+        sd_s = f" | Start: {sd.date()}" if sd is not None else ""
+        print(f"{name:15} | Sharpe: {m['sharpe_ratio']:.3f} | "
+              f"Return: {m['ann_return']*100:.2f}% | "
+              f"Max DD: {m['max_drawdown']*100:.1f}%{sd_s}{fr_s}{turn_s}")
+
+    print()
+    print(f"Annualisation factor: {ANN_FACTOR} observations/year "
+          f"(irregular grid — see core/config.py).")
+    print("Oracle is infeasible by construction; the other four strategies use "
+          "one-sided regime probabilities only.")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-Horizon	N	Brier (Change)	Brier (Baseline)	Brier (RW)	Skill (Change)	AUC (Change)	AUC (Baseline)	AUC (RW)	HighVol Det.
-1-day	3310	0.0907	0.0904	0.1205	24.7%	0.808	0.798	0.735	36.1%
-5-day	3310	0.0993	0.0977	0.1312	24.3%	0.766	0.738	0.695	31.8%
-21-day	3310	0.1058	0.1101	0.1382	23.4%	0.751	0.602	0.668	27.8%
+Horizon	N	Brier (Change)	Brier (Baseline)	Brier (RW)	Skill (Change)	AUC (Change)	AUC (Baseline)	AUC (RW)	HighVol Det.	Hit Rate (Change)	Hit Rate (Always-Calm)	Hit Gain vs Always-Calm
+1-day	2122	0.1124	0.1086	0.1410	20.3%	0.816	0.814	0.753	50.0%	86.2%	85.2%	+1.0pp
+5-day	2122	0.1246	0.1154	0.1500	16.9%	0.782	0.780	0.735	45.8%	85.4%	85.3%	+0.1pp
+21-day	2122	0.1419	0.1221	0.1650	14.0%	0.746	0.695	0.689	38.4%	82.8%	85.8%	-3.0pp

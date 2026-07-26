@@ -1,0 +1,29 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build / packaging artefacts
+*.egg-info/
+build/
+dist/
+
+# Editor / OS cruft
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Local scratch (NOT the paper outputs — research/output_charts/ is tracked
+# on purpose, since the reproduction package ships its produced figures and
+# tables alongside the code that generates them).
+scratch/
+*.log

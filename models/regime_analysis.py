@@ -15,6 +15,8 @@ from itertools import combinations
 from typing import Dict, List, Optional, Tuple
 from scipy import stats
 
+from core.utils import hard_labels_from_daily_probs as _hard_labels
+
 
 @dataclass
 class QuantileTestRow:
@@ -31,15 +33,28 @@ class QuantileTestRow:
 
 
 def make_hard_labels_from_probs(daily_probs_df: pd.DataFrame) -> pd.Series:
-    """Hard regime label per day using argmax of p_k columns."""
-    pcols = [c for c in daily_probs_df.columns if c.startswith("p_")]
-    labels = daily_probs_df[pcols].values.argmax(axis=1)
-    return pd.Series(labels, index=daily_probs_df.index, name="regime")
+    """Hard regime label per day using argmax of p_k columns.
+
+    Delegates to :func:`core.utils.hard_labels_from_daily_probs` so that the
+    p_-column ordering is numeric rather than lexicographic.
+    """
+    return _hard_labels(daily_probs_df)
 
 
 def hard_labels_from_daily_probs(daily_probs_df: pd.DataFrame) -> np.ndarray:
-    pcols = [c for c in daily_probs_df.columns if c.startswith("p_")]
-    return daily_probs_df[pcols].values.argmax(axis=1)
+    """Hard regime label per day, as a plain ndarray.
+
+    Thin ndarray-returning wrapper over
+    :func:`core.utils.hard_labels_from_daily_probs`. Both implementations used
+    to exist independently and differed: this one selected p_ columns in
+    DataFrame order (lexicographic once written to CSV), which silently
+    diverges from numeric order at p_10 and beyond.
+
+    The ndarray return type is load-bearing — :func:`regime_turnover_stats`
+    compares ``labels[1:] != labels[:-1]``, which on a pandas Series would align
+    on the index instead of position and produce nonsense.
+    """
+    return _hard_labels(daily_probs_df).to_numpy()
 
 
 def compare_means_vols_across_regimes_hard(

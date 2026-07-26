@@ -1,7 +1,12 @@
 """
 Figure 2 — Forecast Accuracy by Horizon (3-panel: Brier Skill / AUC-ROC / High-Vol Detection).
 
-Reads ar_change_multihorizon_summary.csv from research.analysis.forecast_eval.
+Reads ar_change_multihorizon_summary.csv from research.analysis.forecast_eval,
+which is computed on the ONE-SIDED K=2 regime-probability series.
+
+Because the one-sided series starts at observation index WINDOW_SIZE
+(2007-02-05), the evaluation sample is shorter than under the retrospective
+series — the figure annotates the realised n_forecasts.
 
 Run:  python -m research.figures.figure2_forecast_accuracy
 """
@@ -64,6 +69,23 @@ def main():
     ax3.set_ylabel("High-Vol Detection Rate (%)")
     ax3.set_title(r"(c) High-Volatility Detection ($\theta$ = 0.5)", fontweight="bold")
     ax3.legend(loc="upper right"); ax3.set_ylim(0, 50)
+
+    # Panel (c) is a raw detection rate; annotate the trivial-classifier
+    # baseline so it cannot be read as skill on its own.
+    if "hit_rate_always_calm" in ar_change.columns:
+        calm = [ar_change.loc[h, "hit_rate_always_calm"] * 100 for h in horizons]
+        gains = [ar_change.loc[h, "hit_gain_change_vs_always_calm"] * 100 for h in horizons]
+        calm_note = ("  Always-calm hit-rate baseline: "
+                     + ", ".join(f"{h}d {c:.1f}% (AR Change {g:+.1f}pp)"
+                                 for h, c, g in zip(horizons, calm, gains)) + ".")
+    else:
+        calm_note = ""
+
+    n_fc = int(ar_change.loc[horizons[0], "n_forecasts"])
+    fig.text(0.5, -0.04,
+             f"Note: computed on the one-sided K=2 regime-probability series "
+             f"(no look-ahead); n_forecasts = {n_fc} per horizon.{calm_note}",
+             ha="center", fontsize=8, style="italic")
 
     plt.tight_layout()
     for ext in ("png", "pdf"):

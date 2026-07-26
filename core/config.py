@@ -19,10 +19,27 @@ FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 TABLES_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------
+# Regime-probability series filenames
+# ---------------------------------------------------------------------
+# RETROSPECTIVE (smoothed, full-sample) — descriptive use only. The value at
+# date t averages the in-sample responsibilities of every window containing t,
+# so it embeds returns dated up to ~1200 observations AFTER t.
+RETRO_PROBS_FILE = "daily_regime_probabilities.csv"                    # K-varying
+RETRO_FORECAST_PROBS_FILE = "daily_regime_probabilities_forecast.csv"  # K=2
+
+# ONE-SIDED (no look-ahead) — primary series for all forecast/backtest work.
+# Each date is served by exactly one model whose training data ends strictly
+# before that date. Starts at observation index WINDOW_SIZE (2007-02-05).
+ONESIDED_PROBS_FILE = "daily_regime_probabilities_onesided.csv"                    # K-varying
+ONESIDED_FORECAST_PROBS_FILE = "daily_regime_probabilities_forecast_onesided.csv"  # K=2
+
+# ---------------------------------------------------------------------
 # Rolling-window GMM
 # ---------------------------------------------------------------------
-WINDOW_SIZE = 1250        # 5 years of business days
-STEP = 63                 # ~quarterly refit
+WINDOW_SIZE = 1250        # 1250 observations spanning variable calendar time
+                          # depending on data density (see ANN_FACTOR note below);
+                          # on this grid a window spans ~6.0-14.3 calendar years.
+STEP = 63                 # ~quarterly refit (63 observations, not 63 calendar days)
 K_CANDIDATES = [2, 3, 4, 5, 6, 7]
 SCALE_METHOD = "none"     # raw log returns into the GMM
 MAX_ITER = 200
@@ -48,19 +65,27 @@ FORECAST_K = 2
 # ---------------------------------------------------------------------
 AR_HORIZONS = [1, 5, 21]
 AR_MAX_LAG = 5
+# AR_MIN_TRAIN and PORT_MIN_TRAIN below are OBSERVATION COUNTS, not calendar
+# days. On this irregular grid 250 observations span ~1.7 calendar years.
 AR_MIN_TRAIN = 250
 AR_REFIT_FREQ = 21
 HV_THRESHOLD = 0.5
-TARGET_REGIME = "p_1"     # high-vol regime in K=2 trace-ordered fit
+# High-vol regime in the K=2 trace-ordered fit. Consumers MUST load one of the
+# K=2 probability files (see ONESIDED_FORECAST_PROBS_FILE); in the K-varying
+# file p_1 is the MIDDLE of three trace-ordered regimes, not the crisis regime.
+TARGET_REGIME = "p_1"
 
 # ---------------------------------------------------------------------
 # Portfolio backtest (Figure 4)
 # ---------------------------------------------------------------------
 TRANSACTION_COST_BPS = 5
 TRANSACTION_COST = TRANSACTION_COST_BPS / 10_000
-PORT_MIN_TRAIN = 250
+PORT_MIN_TRAIN = 250      # observation count, not calendar days (see AR_MIN_TRAIN)
 REGIME_RECOMPUTE_FREQ = 63
-ANN_FACTOR = 252
+
+# 3643 filtered observations / 25.229 calendar years (2000-10-31 to 2026-01-23).
+# Grid is irregular (13-250 obs/yr); any scalar is an approximation.
+ANN_FACTOR = 144.40
 
 # ---------------------------------------------------------------------
 # Asset universes

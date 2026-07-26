@@ -4,6 +4,13 @@ Figure 1 — Posterior Regime Probabilities, Rolling GMM Estimation (2000-2025).
 Reads daily_regime_probabilities.csv produced by pipeline.py and emits a
 stacked-area chart in trace order (p_0 = calm, p_{K-1} = crisis).
 
+This figure deliberately uses the RETROSPECTIVE (smoothed, full-sample) series.
+It depicts the estimated regime history — what the model says the regimes were,
+given everything now known — which is the right object for a descriptive
+picture. It is NOT an investable signal: each date embeds returns dated up to
+~1200 observations later. Forecast and backtest artefacts (Figures 2-4) use the
+one-sided series instead.
+
 Run:  python -m research.figures.figure1_regime_probabilities
 """
 import matplotlib.pyplot as plt
@@ -41,11 +48,18 @@ def main():
     ax.set_xlim(P.index.min(), P.index.max())
     ax.set_ylabel("Posterior probability")
     ax.set_xlabel("Date")
-    ax.set_title("Posterior Regime Probabilities, Rolling GMM Estimation (2000–2025)")
+    ax.set_title("Posterior Regime Probabilities, Rolling GMM Estimation "
+                 "(2000–2025, retrospective/smoothed)")
     ax.xaxis.set_major_locator(mdates.YearLocator(2))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
     ax.grid(alpha=0.25)
     ax.legend(loc="lower right", ncols=K, frameon=False)
+    fig.text(0.5, -0.03,
+             "Note: retrospective (full-sample smoothed) estimate — each date "
+             "averages ~20 overlapping in-sample window fits and embeds returns "
+             "dated up to ~1200 observations later. Descriptive only; not an "
+             "investable signal.",
+             ha="center", fontsize=8, style="italic")
     plt.tight_layout()
 
     for ext in ("png", "pdf"):
