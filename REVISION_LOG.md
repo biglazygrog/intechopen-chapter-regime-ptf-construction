@@ -146,6 +146,41 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 *Newest first. One entry per working session, written before every commit and at
 the end of every session even if nothing was committed.*
 
+### 2026-08-01 — Figure 3 note correction
+
+**Done.** Regenerated Figure 3 with a corrected note. The shipped figure still
+carried a Block 1 statement that the Block 2 grid correction had invalidated:
+*"window is 252 observations (~1.75 calendar years on this irregular grid)"*.
+Both claims are false on the corrected grid — 252 observations span **1.01**
+calendar years at `ANN_FACTOR = 248.48`, and the grid is near-uniform, which is
+the *opposite* of what Figure A.1 in the same submission demonstrates. This was
+the only instance of the stale Block 1 prose rendered into a shipped artefact.
+
+The note now reads:
+
+> Note: 252-observation rolling window (~1.0 calendar year), not 252 calendar
+> days. Built from the one-sided K=2 probability series.
+
+Wording supplied by the author. The two trailing clauses were retained on my
+recommendation: the observations-vs-days distinction is not carried by the new
+phrasing on its own, and the provenance sentence is worth keeping. Also
+corrected the module docstring in the same file, which repeated the same stale
+facts (`ANN_FACTOR = 144.40`, "irregular grid", 1.75 years).
+
+**Tested.** `python -m research.figures.figure3_rolling_hit_rate`, exit 0. Plot
+data **unchanged** — the script re-reported AR 85.1%, RW 82.6%, always-calm
+85.7%, identical to the committed values, because
+`dominant_regime_forecast_eval.csv` was not touched. Only the note text differs.
+The `.png`/`.pdf` binary diffs are larger than the one line of changed text
+because matplotlib rewrites embedded metadata on every render.
+
+**Committed** with this entry.
+
+**Next.** Open question 10 — the same Block 1 prose survives in four other
+files. None affects a computed number, but three of them misstate the sample
+size or the annualisation factor in a reproduction package. Author to decide
+whether to sweep them.
+
 ### 2026-07-26 — Block 2, Phase 2 (draft text) — BLOCKED, resume here
 
 **Done.** Drafted the Section 3.1 filter-disclosure text. Author approved it
@@ -411,6 +446,27 @@ backtest numbers should not go to the editor until that is resolved.
 ## Open questions
 
 *Numbered. Resolution noted next to the item before removal.*
+
+10. **[OPEN — raised 2026-08-01]** Stale Block 1 prose survived the Block 2 grid
+    correction in files other than Figure 3. **No computed value is affected** —
+    every live annualisation reads `ANN_FACTOR` from `core.config`, so Table 3
+    and the backtest metrics are correct. But a reproduction package that states
+    the wrong sample size and the wrong annualisation factor in its own
+    documentation is a reviewer-visible defect.
+
+    | Location | Says | Should say |
+    |---|---|---|
+    | `research/figures/figure3_rolling_hit_rate.py:7-8` | ANN_FACTOR 144.40, irregular grid, 1.75 yr | **FIXED 2026-08-01** |
+    | `research/analysis/moments.py:12-14` | ANN_FACTOR 144.40, 3643 observations | 248.48, 6269 |
+    | `research/analysis/moments.py:73` | prints "(irregular grid)" | near-uniform grid |
+    | `core/config.py:32` | one-sided series starts 2007-02-05 | 2006-01-30 |
+    | `core/config.py:67` | 250 observations span ~1.7 calendar years | ~1.0 calendar year |
+    | `research/analysis/pipeline.py:15` | one-sided starts 2007-02-05 | 2006-01-30 |
+    | `research/figures/figure2_forecast_accuracy.py:8` | one-sided starts 2007-02-05 | 2006-01-30 |
+
+    All are comments, docstrings or one stdout line. A sweep changes no output
+    file except `moments.py`'s printed header. Author to rule on whether to do
+    it in this revision round or leave it.
 
 6. **[RESOLVED 2026-07-26 — option (a) implemented, see Session log]**
    `min_train` was double-counted in `backtest_regime_aware_expanding`, and the

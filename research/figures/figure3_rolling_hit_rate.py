@@ -4,9 +4,9 @@ Figure 3 — Rolling 252-observation Hit Rate: AR Model vs Random Walk.
 Reads dominant_regime_forecast_eval.csv from research.analysis.pipeline, which
 is built from the ONE-SIDED K=2 regime-probability series.
 
-The window is 252 OBSERVATIONS, not 252 calendar days. On this irregular grid
-(ANN_FACTOR = 144.40 obs/yr) that spans roughly 1.75 calendar years. The window
-is deliberately not rescaled — only the label is corrected.
+The window is 252 OBSERVATIONS, not 252 calendar days. On the corrected
+near-uniform grid (ANN_FACTOR = 248.48 obs/yr) that spans roughly 1.0 calendar
+year. The window is deliberately not rescaled — only the label is corrected.
 
 Run:  python -m research.figures.figure3_rolling_hit_rate
 """
@@ -50,9 +50,9 @@ def main():
     ax.set_ylim(40, 100)
     ax.grid(True, alpha=0.3)
     fig.text(0.5, -0.02,
-             f"Note: window is {window} observations (~1.75 calendar years on "
-             f"this irregular grid), not {window} calendar days. Built from the "
-             f"one-sided K=2 probability series.",
+             f"Note: {window}-observation rolling window (~1.0 calendar year), "
+             f"not {window} calendar days. Built from the one-sided K=2 "
+             f"probability series.",
              ha="center", fontsize=8, style="italic")
     plt.tight_layout()
 
