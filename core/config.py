@@ -29,7 +29,7 @@ RETRO_FORECAST_PROBS_FILE = "daily_regime_probabilities_forecast.csv"  # K=2
 
 # ONE-SIDED (no look-ahead) — primary series for all forecast/backtest work.
 # Each date is served by exactly one model whose training data ends strictly
-# before that date. Starts at observation index WINDOW_SIZE (2007-02-05).
+# before that date. Starts at observation index WINDOW_SIZE (2006-01-30).
 ONESIDED_PROBS_FILE = "daily_regime_probabilities_onesided.csv"                    # K-varying
 ONESIDED_FORECAST_PROBS_FILE = "daily_regime_probabilities_forecast_onesided.csv"  # K=2
 
@@ -64,7 +64,7 @@ FORECAST_K = 2
 AR_HORIZONS = [1, 5, 21]
 AR_MAX_LAG = 5
 # AR_MIN_TRAIN and PORT_MIN_TRAIN below are OBSERVATION COUNTS, not calendar
-# days. On this irregular grid 250 observations span ~1.7 calendar years.
+# days. On the corrected near-uniform grid 250 observations span ~1.0 year.
 AR_MIN_TRAIN = 250
 AR_REFIT_FREQ = 21
 HV_THRESHOLD = 0.5

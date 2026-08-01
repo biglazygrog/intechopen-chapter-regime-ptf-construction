@@ -146,6 +146,33 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 *Newest first. One entry per working session, written before every commit and at
 the end of every session even if nothing was committed.*
 
+### 2026-08-01 — Step 1 close-out: Block 1 documentation sweep
+
+**Done.** Swept the remaining stale Block 1 prose recorded as Open question 10,
+per author instruction. Seven sites in four files:
+
+| File | Was | Now |
+|---|---|---|
+| `moments.py` docstring | ANN_FACTOR 144.40, 3643 obs | 248.48, 6269 obs |
+| `moments.py` stdout | "(irregular grid)" | "(near-uniform grid)" |
+| `config.py:32` | one-sided starts 2007-02-05 | 2006-01-30 |
+| `config.py:67` | 250 obs span ~1.7 calendar years | ~1.0 year |
+| `pipeline.py:15` | one-sided starts 2007-02-05 | 2006-01-30 |
+| `figure2_forecast_accuracy.py:8` | one-sided starts 2007-02-05 | 2006-01-30 |
+
+**Tested.** `compileall` clean over `core`, `models`, `research`.
+`python -m research.analysis.moments` exit 0, and
+`table3_regime_moments.{csv,tsv}` are **unchanged on disk** — confirming the
+sweep is documentation-only, as scoped. No figure or table was regenerated.
+
+**Committed and pushed.** This closes Step 1. Open question 10 resolved.
+
+**Next.** Step 2 — Point 7 of the Full Chapter Review Report (replace the
+correlation bootstrap with a time-series-valid procedure). Diagnostic delivered
+2026-08-01; **awaiting author approval before any code changes**. See the new
+Open question 11, which records four issues the diagnostic surfaced that need
+author rulings before implementation.
+
 ### 2026-08-01 — Figure 3 note correction
 
 **Done.** Regenerated Figure 3 with a corrected note. The shipped figure still
@@ -447,7 +474,7 @@ backtest numbers should not go to the editor until that is resolved.
 
 *Numbered. Resolution noted next to the item before removal.*
 
-10. **[OPEN — raised 2026-08-01]** Stale Block 1 prose survived the Block 2 grid
+10. **[RESOLVED 2026-08-01 — swept, see Session log]** Stale Block 1 prose survived the Block 2 grid
     correction in files other than Figure 3. **No computed value is affected** —
     every live annualisation reads `ANN_FACTOR` from `core.config`, so Table 3
     and the backtest metrics are correct. But a reproduction package that states
@@ -465,8 +492,11 @@ backtest numbers should not go to the editor until that is resolved.
     | `research/figures/figure2_forecast_accuracy.py:8` | one-sided starts 2007-02-05 | 2006-01-30 |
 
     All are comments, docstrings or one stdout line. A sweep changes no output
-    file except `moments.py`'s printed header. Author to rule on whether to do
-    it in this revision round or leave it.
+    file except `moments.py`'s printed header.
+
+    **Resolution: swept 2026-08-01, per author instruction.** All seven sites
+    corrected. Verified doc-only: `research.analysis.moments` re-run exit 0 and
+    `table3_regime_moments.{csv,tsv}` are unchanged on disk.
 
 6. **[RESOLVED 2026-07-26 — option (a) implemented, see Session log]**
    `min_train` was double-counted in `backtest_regime_aware_expanding`, and the

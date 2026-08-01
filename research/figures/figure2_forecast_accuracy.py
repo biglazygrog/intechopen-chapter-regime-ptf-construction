@@ -5,7 +5,7 @@ Reads ar_change_multihorizon_summary.csv from research.analysis.forecast_eval,
 which is computed on the ONE-SIDED K=2 regime-probability series.
 
 Because the one-sided series starts at observation index WINDOW_SIZE
-(2007-02-05), the evaluation sample is shorter than under the retrospective
+(2006-01-30), the evaluation sample is shorter than under the retrospective
 series — the figure annotates the realised n_forecasts.
 
 Run:  python -m research.figures.figure2_forecast_accuracy

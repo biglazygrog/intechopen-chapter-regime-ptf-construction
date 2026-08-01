@@ -12,7 +12,7 @@ embeds returns dated up to ~1200 observations AFTER that date.
 
 ONE-SIDED (no look-ahead) — PRIMARY SERIES. Each date is served by exactly one
 model whose training data ends strictly before it. Starts at observation index
-WINDOW_SIZE (2007-02-05); shorter than the retrospective series by construction.
+WINDOW_SIZE (2006-01-30); shorter than the retrospective series by construction.
 - daily_regime_probabilities_onesided.csv           (K-varying — reviewer use only)
 - daily_regime_probabilities_forecast_onesided.csv  (K=2 — feeds Figures 2, 3, 4)
 
