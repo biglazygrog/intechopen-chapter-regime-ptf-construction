@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Tuple
 from scipy import stats
 
 from core.utils import hard_labels_from_daily_probs as _hard_labels
+from core.utils import benjamini_hochberg
 
 
 @dataclass
@@ -314,6 +315,7 @@ class RegimeDistributionalAnalysis:
         self.var_levels = tuple(float(a) for a in var_levels)
         self.min_n = int(min_n)
         self.bootstrap_B = int(bootstrap_B)
+        self.random_state = int(random_state)
         self.rng = np.random.default_rng(random_state)
 
         for q in self.quantiles:
@@ -328,6 +330,36 @@ class RegimeDistributionalAnalysis:
         X = df_returns.loc[common_idx].copy()
         z = regime_labels.loc[common_idx].astype(int).copy()
         return X, z
+
+    def _stationary_bootstrap_indices(
+        self,
+        T: int,
+        expected_block: int,
+        rng: Optional[np.random.Generator] = None,
+    ) -> np.ndarray:
+        """Politis & Romano (1994) stationary bootstrap index sequence.
+
+        Blocks start at uniform random positions and have geometric length with
+        mean ``expected_block`` (restart probability p = 1/expected_block).
+        Indices wrap circularly, which is what makes the resampled series
+        stationary. Returns ``T`` indices into the original series.
+        """
+        if expected_block < 1:
+            raise ValueError(f"expected_block must be >= 1, got {expected_block}.")
+
+        rng = self.rng if rng is None else rng
+        p = 1.0 / float(expected_block)
+        ar = np.arange(T)
+
+        new_block = rng.random(T) < p
+        new_block[0] = True
+
+        # Position of the most recent block start, for every position.
+        block_start_pos = np.maximum.accumulate(np.where(new_block, ar, 0))
+        offset = ar - block_start_pos
+        starts = rng.integers(0, T, size=T)
+
+        return (starts[block_start_pos] + offset) % T
 
     def _valid_regime_samples(self, X: pd.DataFrame, z: pd.Series, asset: str) -> Dict[int, np.ndarray]:
         samples: Dict[int, np.ndarray] = {}
@@ -790,8 +822,53 @@ class RegimeDistributionalAnalysis:
             regime_high: Optional[int] = None,
             bootstrap_B: Optional[int] = None,
             ci_level: float = 0.95,
+            block_length: Optional[int] = None,
     ) -> Dict[str, pd.DataFrame]:
-        """Bootstrap test for differences in cross-asset correlations."""
+        """Stationary-block bootstrap test for regime differences in correlation.
+
+        The resampling unit is a BLOCK OF CONSECUTIVE CALENDAR DAYS drawn from
+        the full return series with the regime labels carried along, not an
+        individual day drawn from within a regime. Each replicate resamples the
+        whole series, then splits the resampled rows by their carried labels and
+        recomputes both regime correlation matrices.
+
+        Why not a within-regime block bootstrap
+        ---------------------------------------
+        The obvious reading of "block bootstrap by regime" — draw blocks of
+        ``floor(sqrt(N_k))`` from each regime's own observations — is not
+        applicable to this data. The regime-conditional subsamples are not
+        contiguous time series. Under the retrospective labels R1's 788
+        observations arrive as 519 separate runs with MEDIAN LENGTH 1 DAY and a
+        maximum of 23; not one run reaches the ``floor(sqrt(788)) = 28`` block
+        that rule would prescribe. Blocks drawn from the concatenated subsample
+        would splice together days separated by months or years — preserving no
+        real serial dependence while carrying the appearance of a time-series
+        method. Resampling the intact series instead keeps blocks on the real
+        time axis, and additionally propagates uncertainty in the regime
+        labels, which the previous procedure conditioned away entirely.
+
+        The superseded procedure drew ``rng.choice(n_k, size=n_k, replace=True)``
+        independently within each regime. Daily returns cluster in volatility,
+        so treating days as independent overstates the effective sample size and
+        understates the variance of the correlation estimator: intervals came
+        out too narrow and p-values too small.
+
+        Parameters
+        ----------
+        block_length : int, optional
+            EXPECTED block length for the stationary bootstrap (Politis &
+            Romano, 1994), whose block lengths are geometric with mean
+            ``block_length``. Defaults to ``floor(sqrt(T))`` on the full series
+            — 78 observations on the 6,269-row corrected grid — as a
+            rule-of-thumb choice.
+
+        Notes
+        -----
+        ``p_value_boot`` is the raw two-sided bootstrap p-value; ``q_value_bh``
+        is the Benjamini-Hochberg adjustment across all C(d,2) pairwise tests
+        (15 for the six-asset core universe). Table 4's stars are assigned on
+        ``q_value_bh``.
+        """
         X, z = self._align(df_returns, regime_labels)
         assets = X.columns.tolist()
         d = len(assets)
@@ -838,23 +915,73 @@ class RegimeDistributionalAnalysis:
         rho_bar1 = mean_abs_corr(C1)
         delta_rho_bar_hat = rho_bar1 - rho_bar0
 
+        # ---- Stationary block bootstrap on the FULL series ------------------
+        # Rows are resampled in blocks of consecutive calendar days, carrying
+        # their regime labels; each replicate is then split by the carried
+        # labels. See the docstring for why a within-regime block bootstrap is
+        # not applicable here.
+        keep = X.notna().all(axis=1).values
+        Xv = X.values[keep]
+        zv = z.values[keep]
+        T_full = len(Xv)
+
+        L = int(block_length) if block_length is not None else int(np.floor(np.sqrt(T_full)))
+
         boot_pair = np.empty((B, len(iu[0])), dtype=float)
         boot_delta_rhobar = np.empty(B, dtype=float)
 
-        x0 = X_low.values
-        x1 = X_high.values
+        # A replicate is rejected if either regime draws too few rows to give a
+        # well-conditioned correlation matrix, or if a resampled column is
+        # constant (corrcoef -> NaN). Rejections are redrawn, counted, and
+        # reported: a silently dropped replicate would bias the interval.
+        min_rows = max(int(self.min_n), d + 1)
+        max_attempts = 100
+        n_rejected = 0
 
-        for b in range(B):
-            idx0 = self.rng.choice(n0, size=n0, replace=True)
-            idx1 = self.rng.choice(n1, size=n1, replace=True)
+        # Dedicated generator, seeded from random_state, so this test reproduces
+        # identically whether it is run inside the full pipeline (after
+        # paper_tables has already consumed draws from self.rng) or standalone.
+        # The previous code drew from the shared self.rng, which made the result
+        # depend on call order.
+        boot_rng = np.random.default_rng(self.random_state)
 
-            C0b = corr_mat(x0[idx0])
-            C1b = corr_mat(x1[idx1])
+        b = 0
+        while b < B:
+            attempts = 0
+            while True:
+                attempts += 1
+                idx = self._stationary_bootstrap_indices(T_full, L, rng=boot_rng)
+                zb = zv[idx]
+                m0 = zb == r_low
+                m1 = zb == r_high
+
+                if m0.sum() >= min_rows and m1.sum() >= min_rows:
+                    C0b = corr_mat(Xv[idx][m0])
+                    C1b = corr_mat(Xv[idx][m1])
+                    if np.isfinite(C0b).all() and np.isfinite(C1b).all():
+                        break
+
+                n_rejected += 1
+                if attempts >= max_attempts:
+                    raise RuntimeError(
+                        f"Stationary bootstrap could not draw a usable replicate "
+                        f"in {max_attempts} attempts (need >= {min_rows} rows in "
+                        f"each of regimes {r_low}/{r_high}). Check the regime "
+                        f"balance or lower min_n."
+                    )
 
             Db = (C1b - C0b)
             boot_pair[b, :] = Db[iu]
-
             boot_delta_rhobar[b] = mean_abs_corr(C1b) - mean_abs_corr(C0b)
+            b += 1
+
+        self.last_bootstrap_info_ = {
+            "method": "stationary_block",
+            "block_length": L,
+            "T_full": T_full,
+            "B": B,
+            "n_rejected": n_rejected,
+        }
 
         rows = []
         for col, (i, j) in enumerate(zip(iu[0], iu[1])):
@@ -883,7 +1010,16 @@ class RegimeDistributionalAnalysis:
                 "ci_level": float(ci_level),
             })
 
-        pairwise_df = pd.DataFrame(rows).sort_values(["p_value_boot", "asset_i", "asset_j"])
+        pairwise_df = pd.DataFrame(rows)
+
+        # BH adjustment across all C(d,2) pairwise tests — 15 for the six-asset
+        # core universe. Table 4's stars are assigned on q, not p.
+        pairwise_df["q_value_bh"] = benjamini_hochberg(pairwise_df["p_value_boot"].values)
+        pairwise_df["n_tests_bh"] = len(pairwise_df)
+        pairwise_df["bootstrap_method"] = "stationary_block"
+        pairwise_df["block_length"] = L
+
+        pairwise_df = pairwise_df.sort_values(["p_value_boot", "asset_i", "asset_j"])
 
         ci_low_agg = float(np.quantile(boot_delta_rhobar, q_lo))
         ci_high_agg = float(np.quantile(boot_delta_rhobar, q_hi))
@@ -904,6 +1040,8 @@ class RegimeDistributionalAnalysis:
             "n_high": int(n1),
             "B": int(B),
             "ci_level": float(ci_level),
+            "bootstrap_method": "stationary_block",
+            "block_length": int(L),
         }])
 
         return {

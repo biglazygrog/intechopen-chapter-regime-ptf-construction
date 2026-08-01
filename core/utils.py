@@ -107,10 +107,51 @@ def format_corr(x, decimals: int = 3) -> str:
     return f"{x:.{decimals}f}"
 
 
-def sig_stars(p_value: float) -> str:
-    """Three-tier significance stars used in the paper correlation table."""
-    if p_value < 0.001:
+def benjamini_hochberg(p_values) -> np.ndarray:
+    """Benjamini-Hochberg adjusted q-values (FDR control).
+
+    Returns the step-up adjusted values in the ORDER OF THE INPUT. The tests in
+    Table 4 share data through overlapping asset pairs and are therefore
+    positively dependent, which is the PRDS condition under which plain BH
+    controls FDR; the more conservative Benjamini-Yekutieli variant (required
+    only under arbitrary dependence) is not needed here.
+    """
+    p = np.asarray(p_values, dtype=float)
+    m = p.size
+    if m == 0:
+        return p.copy()
+
+    order = np.argsort(p, kind="stable")
+    q_sorted = np.empty(m, dtype=float)
+
+    running_min = 1.0
+    for rank in range(m - 1, -1, -1):          # step up: largest p first
+        scaled = p[order[rank]] * m / (rank + 1)
+        running_min = min(running_min, scaled)
+        q_sorted[rank] = running_min
+
+    q = np.empty(m, dtype=float)
+    q[order] = q_sorted
+    return np.clip(q, 0.0, 1.0)
+
+
+def sig_stars(q_value: float) -> str:
+    """Three-tier significance stars for the paper correlation table.
+
+    Applied to BH-ADJUSTED q-values, not raw p-values:
+
+        *** q < 0.01     ** q < 0.05     * q < 0.10     - otherwise
+
+    The previous scheme was ``*** p<0.001 / ** p<0.05 / -``, which had no
+    p<0.10 tier and, more seriously, claimed a resolution the bootstrap did not
+    have: at B = 1000 the smallest attainable non-zero two-sided bootstrap
+    p-value is 2/B = 0.002, so ``p < 0.001`` was unreachable and the entries
+    printed as "<0.001" were really exact zeros. B is now 10,000.
+    """
+    if q_value < 0.01:
         return "***"
-    if p_value < 0.05:
+    if q_value < 0.05:
         return "**"
+    if q_value < 0.10:
+        return "*"
     return "-"

@@ -130,6 +130,16 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 | `README.md` | — | New section "Retrospective vs one-sided regime probabilities": mechanism, look-ahead magnitude, which artefact consumes which file, reduced one-sided sample (2007-02-05 onward, 2393 rows). Add probability-series column to the artefact→producer table. Correct the "5 years" window wording (F-b). | DONE |
 | `REVISION_LOG.md` | — | This file. Kept current; committed with the code. | DONE |
 
+| **POINT 7** — correlation bootstrap (Open question 11) | | | |
+| `models/regime_analysis.py` | `_stationary_bootstrap_indices` | **NEW.** Politis & Romano (1994) stationary bootstrap index sequence: uniform random block starts, geometric block lengths with mean `expected_block`, circular wrap. Vectorised; takes an explicit `rng`. | DONE |
+| `models/regime_analysis.py` | `correlation_difference_tests` | Resampling unit changed from an individual day drawn **within** a regime to a **block of consecutive calendar days drawn from the full series with labels carried along**. Each replicate resamples all 6,227 rows, splits by carried label, and recomputes both regime correlation matrices. Block length `floor(sqrt(T))` = **78**. Degenerate replicates (too few rows in a regime, or a constant column) are redrawn and counted, never silently dropped. | DONE |
+| `models/regime_analysis.py` | `correlation_difference_tests` | Draws from a **dedicated generator seeded from `random_state`** instead of the shared `self.rng`. The old code's result depended on call order, since `paper_tables` runs first in the pipeline and consumes draws. Now reproduces identically standalone or in-pipeline. | DONE |
+| `models/regime_analysis.py` | `correlation_difference_tests` | Adds `q_value_bh`, `n_tests_bh`, `bootstrap_method`, `block_length` to the pairwise output; `bootstrap_method`/`block_length` to the aggregate output. | DONE |
+| `core/utils.py` | `benjamini_hochberg` | **NEW.** Step-up BH adjustment returned in input order. Docstring records why plain BH (not Benjamini-Yekutieli) is valid: the tests share data through overlapping asset pairs and are positively dependent (PRDS). | DONE |
+| `core/utils.py` | `sig_stars` | `*** p<0.001 / ** p<0.05 / -` → `*** q<0.01 / ** q<0.05 / * q<0.10`, applied to **BH q-values**. Sole consumer is `correlations.py`. | DONE |
+| `research/analysis/correlations.py` | `build_table`, `main` | New `q-value (BH)` column; stars assigned on q, not p. Header now prints the bootstrap method, block length, B, and the number of tests the BH adjustment covers. | DONE |
+| `research/analysis/pipeline.py` | `main` | `bootstrap_B` 1,000 → **10,000**, with a comment recording the procedure and why within-regime blocks were rejected. | DONE |
+
 **Output files after this change set** — nothing renamed, moved or deleted:
 
 | File | Status | Content | Consumed by |
@@ -145,6 +155,65 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 
 *Newest first. One entry per working session, written before every commit and at
 the end of every session even if nothing was committed.*
+
+### 2026-08-01 — Point 7: stationary block bootstrap for Table 4
+
+**Done.** Replaced the correlation bootstrap with a time-series-valid procedure,
+per the Open question 11 rulings. Eight change-set rows, all DONE.
+
+The reviewer's diagnosis was correct — `rng.choice(n_k, size=n_k, replace=True)`
+within each regime — but the **prescribed fix was not applicable**. Under the
+retrospective labels R1's 788 observations arrive as **519 separate runs, median
+length 1 day, maximum 23**; not one run reaches the `floor(sqrt(788)) = 28`
+block that rule would require. Blocks drawn from the concatenated subsample
+would splice together days months or years apart. Resampling the intact series
+in blocks and splitting by carried label keeps blocks on the real time axis, and
+additionally propagates label uncertainty, which the old procedure conditioned
+away entirely. This reasoning is recorded in the function docstring, not just
+here.
+
+**Tested.** `compileall` clean. Full pipeline re-run, exit 0. Block length 78,
+T = 6,227, B = 10,000, **0 rejected replicates**, 10.2 s for the bootstrap.
+
+Regeneration was **exceptionally clean**: all four probability CSVs and
+`paper_profiles_raw.csv` came back **byte-identical** (`max_abs_diff = 0.000e+00`,
+0 label flips) — no environmental drift at all this time, unlike the 3.55e-15
+seen in Block 1. The only changed output is
+`correlation_pairwise_bootstrap.csv`. Table 4 regenerated and verified
+**byte-identical to the preview shown to the author before commit**, which is
+what the dedicated-generator change buys.
+
+**Results.** Point estimates unchanged — ρ and Δρ never depended on the
+resampling scheme. Intervals widened 50-70%. Significant at 0.05: **6 → 4**.
+
+| Pair | Was | Now | Note |
+|---|---|---|---|
+| Govt Bonds ~ Cash | *** | *** | survives at q < 0.001 |
+| World Eq. ~ Govt Bonds | *** | ** | q = 0.011 |
+| World Eq. ~ Commodities | *** | ** | q = 0.033 |
+| IG Credit ~ Cash | ** | ** | q = 0.033 |
+| World Eq. ~ Cash | *** | * | q = 0.057 — now marginal |
+| **Govt Bonds ~ IG Credit** | ** | **-** | **drops out**: p 0.016 → 0.138 |
+
+Aggregate mean |ρ| 0.210 → 0.251, CI [0.007, 0.071], p = 0.020 — still
+significant.
+
+**Two chapter-text consequences.** (1) Any claim that the **bond/credit**
+correlation shifts across regimes must be **withdrawn** — it does not survive a
+time-series-valid procedure. (2) **World Eq. ~ Cash** is now marginal and any
+strong language about it should be softened. The flight-to-quality story is
+intact.
+
+**Committed.** Merge and tag deliberately **not** done — see Next.
+
+**Next.**
+1. Author rules on **Open question 12** (12a: Table 3's bootstrap has the same
+   iid defect; 12b: `significant_ci_excludes_zero` vs the BH stars).
+2. Chapter text: withdraw the bond/credit claim, soften equity/cash, state
+   **15** tests not 12, update the Table 4 caption to the q-value scheme.
+3. Then merge to `main` and tag `v1.0-revision`. Tagging before 12a is settled
+   would stamp a release on a package that still contains one iid bootstrap of
+   exactly the kind Point 7 exists to remove.
 
 ### 2026-08-01 — Step 1 close-out: Block 1 documentation sweep
 
@@ -473,6 +542,66 @@ backtest numbers should not go to the editor until that is resolved.
 ## Open questions
 
 *Numbered. Resolution noted next to the item before removal.*
+
+12. **[OPEN — raised 2026-08-01]** Two issues surfaced while implementing
+    Point 7. Neither blocks the Point 7 fix; both need an author ruling before
+    the revision is tagged.
+
+    **12a. Table 3's bootstrap has the same defect Point 7 corrects.**
+    `models/regime_analysis.py:561-562`, inside `paper_tables`, still resamples
+    quantiles **iid within regime** — the identical
+    `rng.choice(x, size=n, replace=True)` pattern the reviewer objected to. It
+    drives the VaR/ES/quantile confidence intervals behind Table 3. Outside
+    Point 7's scope as written, but it is the same criticism, and a reviewer who
+    caught it once may catch it again. Fix, or disclose and leave?
+
+    **12b. `significant_ci_excludes_zero` no longer agrees with the stars.**
+    That column in `correlation_pairwise_bootstrap.csv` is computed from the
+    percentile CI, which is unadjusted for multiple testing, so it flags 5 pairs
+    where the BH stars flag 4. It does not appear in Table 4 — raw CSV only.
+    Leave it as a documented unadjusted flag, or switch it to track q?
+
+11. **[RESOLVED 2026-08-01 — implemented, see Session log]** Point 7 (correlation
+    bootstrap) diagnostic surfaced four issues needing author rulings before
+    implementation.
+
+    **Rulings received and implemented in full:**
+
+    - **11a →** full-series block bootstrap with labels attached, as the single
+      headline procedure. Run-level cluster bootstrap **explicitly declined** —
+      the reviewer asked for one justified procedure, not two. The rejection of
+      the within-regime block bootstrap is documented in the
+      `correlation_difference_tests` docstring.
+    - **11b →** the review report's "12 pairwise tests" is **wrong; there are
+      15** (C(6,2) = 15). Not silently adopted: the manuscript states 15, and
+      the raw CSV carries `n_tests_bh = 15`.
+    - **11c →** no `arch` dependency. Hand-rolled stationary bootstrap, block
+      length fixed at `floor(sqrt(6227))` = **78**, documented as a
+      rule-of-thumb citing Politis & Romano (1994).
+    - **11d →** BH applied to the post-fix p-values. Stars
+      `*** q<0.01 / ** q<0.05 / * q<0.10` on q-values, in both code and caption,
+      with a note that q is BH-adjusted across 15 tests. B raised to 10,000,
+      which also retires the unsupportable `p<0.001` claim (at B = 1000 the
+      smallest attainable non-zero two-sided p was 0.002).
+
+    **11a. The reviewer is right, and the fix is not the one proposed.** The
+    bootstrap at `models/regime_analysis.py:847-857` is iid over rows within
+    each regime. But `floor(sqrt(N_k))` = 73 / 28 is **infeasible for R1**: the
+    regime-conditional subsamples are not contiguous time series. R1's 788
+    observations arrive as **519 separate runs, mean length 1.5, median 1,
+    max 23** — not one run reaches the proposed 28-observation block. A block
+    bootstrap cannot be applied within-regime as specified.
+
+    **11b. Table 4 has 15 pairwise tests, not 12** (6 assets, C(6,2) = 15).
+
+    **11c. B = 1000 cannot resolve p < 0.001.** Smallest non-zero two-sided
+    bootstrap p is 2/B = 0.002. Four pairs report p = 0 exactly and print as
+    "<0.001", a precision the simulation does not have.
+
+    **11d. `sig_stars` and the Table 4 caption disagree** — code is
+    `*** p<0.001 / ** p<0.05 / -`, with no p<0.10 tier. Caption text could not
+    be verified (no manuscript in this environment; see the Block 2 Phase 2
+    entry).
 
 10. **[RESOLVED 2026-08-01 — swept, see Session log]** Stale Block 1 prose survived the Block 2 grid
     correction in files other than Figure 3. **No computed value is affected** —

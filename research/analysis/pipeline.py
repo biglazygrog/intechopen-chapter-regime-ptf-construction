@@ -201,11 +201,17 @@ def main():
     print(f"  Saved paper_profiles_raw.csv (feeds Table 3)")
 
     # ----- 4. Correlation difference tests (feeds Table 4) -----
-    print("\nComputing pairwise correlation differences (bootstrap B=1000)...")
+    # Stationary block bootstrap (Politis & Romano 1994) on the FULL series with
+    # regime labels carried along — NOT an iid resample within each regime. See
+    # RegimeDistributionalAnalysis.correlation_difference_tests for why a
+    # within-regime block bootstrap is not applicable (R1's median run length is
+    # 1 day). Block length defaults to floor(sqrt(T)) = 78 observations.
+    print("\nComputing pairwise correlation differences "
+          "(stationary block bootstrap, B=10,000)...")
     corr_tests = dist.correlation_difference_tests(
         df_returns=df,
         regime_labels=regime_labels,
-        bootstrap_B=1000,
+        bootstrap_B=10_000,
         ci_level=0.95,
     )
     corr_tests["correlation_pairwise"].to_csv(
