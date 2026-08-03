@@ -140,6 +140,13 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 | `research/analysis/correlations.py` | `build_table`, `main` | New `q-value (BH)` column; stars assigned on q, not p. Header now prints the bootstrap method, block length, B, and the number of tests the BH adjustment covers. | DONE |
 | `research/analysis/pipeline.py` | `main` | `bootstrap_B` 1,000 → **10,000**, with a comment recording the procedure and why within-regime blocks were rejected. | DONE |
 
+| **POINT 7 follow-up** — Open question 12 | | | |
+|---|---|---|---|
+| `models/regime_analysis.py` | `quantile_equality_tests` | **12a.** Docstring warning: the resample is iid within regime, is not time-series valid, and **drives no reported result** — its output reaches `paper_comparison_raw`, which `pipeline.py` never writes; Table 3 carries point estimates only. Records what to do (reuse `_stationary_bootstrap_indices`) if any future artefact does report it. **Behaviour unchanged.** | DONE |
+| `models/regime_analysis.py` | `correlation_difference_tests` | **12b.** New `significant_bh_q05` column (`q_value_bh < 0.05`) beside the existing unadjusted `significant_ci_excludes_zero`. Both retained; an inline comment states they are deliberately not reconciled and names the one disagreeing pair. Aggregate frame unchanged — single test, no multiplicity. | DONE |
+| `models/regime_analysis.py` | `correlation_difference_tests` docstring | **12b.** Notes section documents the two significance columns and records that `ci_low`/`ci_high` — and Table 4's printed CI columns — are per-pair and unadjusted. | DONE |
+| `research/analysis/correlations.py` | `main` | **12b.** Printed caption gains a line stating the CI columns are unadjusted for multiple testing while the stars follow BH q, so a pair may show a CI excluding zero and carry fewer than two stars. Table output unchanged. | DONE |
+
 **Output files after this change set** — nothing renamed, moved or deleted:
 
 | File | Status | Content | Consumed by |
@@ -155,6 +162,60 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 
 *Newest first. One entry per working session, written before every commit and at
 the end of every session even if nothing was committed.*
+
+### 2026-08-03 — Open question 12 closed (12a disclosure, 12b second flag)
+
+**Done.** Both Point 7 follow-ups, per author rulings. Four change-set rows.
+
+**12a — the recorded premise was wrong, and it changed the ruling.** The log had
+this as *"it drives the VaR/ES/quantile confidence intervals behind Table 3."*
+Traced: it does not. The iid resample is in `quantile_equality_tests`
+(`regime_analysis.py:593-594`, not the line numbers recorded — they had
+drifted). Its output reaches `paper_comparison_raw`, which **`pipeline.py` never
+writes to disk** — only `paper_profiles_raw` is saved. `table3_regime_moments`
+carries point estimates only: no CIs, no p-values. The other caller,
+`run_full_analysis`, has **zero callers** in the repository. So the defect is
+real as code but feeds nothing that is reported, and no number moves under any
+option.
+
+Ruling: **disclose in the docstring, leave the code**. The docstring now states
+the resample is iid, why that biases intervals narrow, that it drives no
+reported result, and what to replace it with if a future artefact ever does
+report it. Fixing a path nothing consumes would have spent effort for no
+reviewer-visible gain; leaving it silent would have left a reviewer to find the
+same pattern Point 7 exists to remove.
+
+**12b — keep both flags, document both.** Ruling: retain
+`significant_ci_excludes_zero` with a documented meaning, add
+`significant_bh_q05` beside it, and add a caption note. All three done. The
+disagreement is a single pair — **World Eq. ~ Cash**, p = 0.019 but q = 0.057,
+CI [−0.239, −0.020] — so the CI flags 5 where BH flags 4. Beyond what the log
+recorded, this is also visible in the *printed* Table 4, which sets unadjusted
+CI columns beside q-based stars; the new caption line names that explicitly.
+
+**Tested.** `compileall` clean. Full pipeline re-run, exit 0. Diffed against a
+pre-run snapshot of the whole `output_charts` tree: **exactly one file changed**
+— `correlation_pairwise_bootstrap.csv`. All four probability CSVs,
+`paper_profiles_raw.csv` and `dominant_regime_forecast_eval.csv` are
+**byte-identical**; no environmental drift, as in the Point 7 run. Within the
+changed file, one column added, none removed, and **every shared column
+identical** (`DataFrame.equals`). Table 4 regenerated:
+`table4_correlations.{csv,tsv}` **byte-identical** — the change is the CSV column
+and the printed caption only.
+
+**No result changes.** Point estimates, CIs, p-values, q-values and stars are all
+as committed on 2026-08-01.
+
+**Next.**
+1. **Chapter text (author).** Unchanged from the Point 7 entry: withdraw the
+   bond/credit claim, soften equity/cash, state **15** tests not 12, update the
+   Table 4 caption to the q-value scheme. Add to that list: the caption should
+   say the reported CIs are unadjusted per-pair intervals while the stars are
+   BH-adjusted — the manuscript caption is the one place this is not yet stated,
+   since the repository caption is a printed line the reader of the chapter never
+   sees.
+2. Then merge to `main` and tag `v1.0-revision`. Open question 12 no longer
+   blocks the tag.
 
 ### 2026-08-01 — Point 7: stationary block bootstrap for Table 4
 
@@ -543,23 +604,38 @@ backtest numbers should not go to the editor until that is resolved.
 
 *Numbered. Resolution noted next to the item before removal.*
 
-12. **[OPEN — raised 2026-08-01]** Two issues surfaced while implementing
-    Point 7. Neither blocks the Point 7 fix; both need an author ruling before
-    the revision is tagged.
+12. **[RESOLVED 2026-08-03 — implemented, see Session log]** Two issues surfaced
+    while implementing Point 7. Neither blocked the Point 7 fix; both are now
+    closed, and neither changes a reported number.
 
-    **12a. Table 3's bootstrap has the same defect Point 7 corrects.**
-    `models/regime_analysis.py:561-562`, inside `paper_tables`, still resamples
+    **12a. An iid within-regime bootstrap survives Point 7.**
+    `quantile_equality_tests` (`models/regime_analysis.py:593-594`) resamples
     quantiles **iid within regime** — the identical
-    `rng.choice(x, size=n, replace=True)` pattern the reviewer objected to. It
-    drives the VaR/ES/quantile confidence intervals behind Table 3. Outside
-    Point 7's scope as written, but it is the same criticism, and a reviewer who
-    caught it once may catch it again. Fix, or disclose and leave?
+    `rng.choice(x, size=n, replace=True)` pattern the reviewer objected to.
 
-    **12b. `significant_ci_excludes_zero` no longer agrees with the stars.**
+    *As originally recorded this item said the bootstrap "drives the VaR/ES/
+    quantile confidence intervals behind Table 3", and cited lines 561-562. Both
+    were wrong.* The line numbers had drifted, and the output is not reported:
+    it reaches `paper_comparison_raw`, which `pipeline.py` never writes to disk
+    (only `paper_profiles_raw` is saved), and `table3_regime_moments` carries
+    point estimates only — no CIs, no p-values. The other caller,
+    `run_full_analysis`, has no callers in the repository.
+
+    **Resolution: disclose in the docstring, leave the code**, per author
+    instruction. Behaviour unchanged; no artefact regenerated on this account.
+
+    **12b. `significant_ci_excludes_zero` does not agree with the stars.**
     That column in `correlation_pairwise_bootstrap.csv` is computed from the
     percentile CI, which is unadjusted for multiple testing, so it flags 5 pairs
-    where the BH stars flag 4. It does not appear in Table 4 — raw CSV only.
-    Leave it as a documented unadjusted flag, or switch it to track q?
+    where the BH stars flag 4 — the difference is World Eq. ~ Cash (p = 0.019,
+    q = 0.057). The same tension is visible in the printed Table 4, which sets
+    unadjusted CI columns beside q-based stars.
+
+    **Resolution: keep both, document both**, per author instruction. The
+    unadjusted flag is retained with a documented meaning, `significant_bh_q05`
+    is added beside it, and the Table 4 caption states that the CI columns are
+    unadjusted while the stars follow BH q. The **manuscript** caption still
+    needs the same sentence — see the session log's Next.
 
 11. **[RESOLVED 2026-08-01 — implemented, see Session log]** Point 7 (correlation
     bootstrap) diagnostic surfaced four issues needing author rulings before

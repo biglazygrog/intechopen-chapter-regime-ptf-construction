@@ -567,7 +567,30 @@ class RegimeDistributionalAnalysis:
         return pd.DataFrame(rows).sort_values(["asset", "alpha", "regime"])
 
     def quantile_equality_tests(self, df_returns: pd.DataFrame, regime_labels: pd.Series) -> pd.DataFrame:
-        """Pairwise bootstrap tests of quantile equality."""
+        """Pairwise bootstrap tests of quantile equality.
+
+        NOT TIME-SERIES VALID, AND NOT USED FOR ANY REPORTED RESULT.
+
+        The resample below is ``rng.choice(x_k, size=n_k, replace=True)`` — iid
+        over rows within each regime, exactly the procedure
+        ``correlation_difference_tests`` was rewritten to remove. Daily returns
+        cluster in volatility, so treating days as independent overstates the
+        effective sample size: the intervals are too narrow and the p-values too
+        small. Read the numbers accordingly.
+
+        It is retained, unfixed, because nothing in the reproduction package
+        reports it. Its output reaches ``paper_tables`` as the ``Q*_p`` columns
+        of ``paper_comparison_raw``, which ``research/analysis/pipeline.py``
+        never writes to disk — only ``paper_profiles_raw`` is saved. Table 3
+        (``research/analysis/moments.py``) carries point estimates only: no
+        confidence intervals and no p-values. Nothing else calls this method.
+
+        If any future artefact does come to report these p-values, replace the
+        resample with the stationary block bootstrap in
+        ``_stationary_bootstrap_indices`` first — see
+        ``correlation_difference_tests`` for the procedure and for why a
+        within-regime block bootstrap is not applicable to this data.
+        """
         X, z = self._align(df_returns, regime_labels)
         assets = X.columns.tolist()
 
@@ -868,6 +891,18 @@ class RegimeDistributionalAnalysis:
         is the Benjamini-Hochberg adjustment across all C(d,2) pairwise tests
         (15 for the six-asset core universe). Table 4's stars are assigned on
         ``q_value_bh``.
+
+        The pairwise frame carries TWO significance columns and they are not
+        expected to agree. ``significant_ci_excludes_zero`` reads each pair's
+        percentile CI on its own and is UNADJUSTED for multiple testing;
+        ``significant_bh_q05`` is ``q_value_bh < 0.05`` and is the adjusted
+        decision the reported stars follow. The ``ci_low``/``ci_high`` columns —
+        and the CI columns printed in Table 4 — are likewise per-pair and
+        unadjusted, so a pair can show a CI excluding zero while carrying fewer
+        than two stars.
+
+        The aggregate frame keeps ``significant_ci_excludes_zero`` only: it is a
+        single test, so there is no multiplicity to adjust for.
         """
         X, z = self._align(df_returns, regime_labels)
         assets = X.columns.tolist()
@@ -1015,6 +1050,16 @@ class RegimeDistributionalAnalysis:
         # BH adjustment across all C(d,2) pairwise tests — 15 for the six-asset
         # core universe. Table 4's stars are assigned on q, not p.
         pairwise_df["q_value_bh"] = benjamini_hochberg(pairwise_df["p_value_boot"].values)
+        # Two significance columns, deliberately kept side by side and NOT
+        # reconciled. `significant_ci_excludes_zero` is the per-pair percentile
+        # CI read on its own, unadjusted for multiple testing;
+        # `significant_bh_q05` is the multiplicity-adjusted decision and is the
+        # one Table 4's stars follow. They disagree on pairs whose raw p is
+        # below 0.05 but whose q is not — on the corrected grid that is
+        # World Equities ~ Cash (p = 0.019, q = 0.057), so the CI flags 5 pairs
+        # where BH flags 4. That disagreement is the multiplicity correction
+        # doing its job, not an inconsistency to be papered over.
+        pairwise_df["significant_bh_q05"] = pairwise_df["q_value_bh"] < 0.05
         pairwise_df["n_tests_bh"] = len(pairwise_df)
         pairwise_df["bootstrap_method"] = "stationary_block"
         pairwise_df["block_length"] = L

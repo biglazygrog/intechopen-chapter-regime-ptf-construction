@@ -75,6 +75,9 @@ def main():
     print(f"Bootstrap: {method}, expected block length {L} observations, B = {B:,}.")
     print(f"q-values are Benjamini-Hochberg adjusted across {n_tests} pairwise tests.")
     print("Stars: *** q<0.01, ** q<0.05, * q<0.10.")
+    print("CI columns are per-pair percentile intervals, UNADJUSTED for multiple "
+          "testing; the stars follow the BH-adjusted q. A pair may therefore show "
+          "a CI excluding zero and still carry fewer than two stars.")
     print(fmt.to_string(index=False))
 
 
