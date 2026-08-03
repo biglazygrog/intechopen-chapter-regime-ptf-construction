@@ -70,6 +70,27 @@ def compare_means_vols_across_regimes_hard(
     Returns dict with:
       - summary tables (ANOVA, Levene)
       - pairwise tables (Welch t-tests, pairwise Levene)
+
+    ASSUMES INDEPENDENT OBSERVATIONS, AND NOT USED FOR ANY REPORTED RESULT.
+
+    Every test below — ``f_oneway``, ``levene``, ``ttest_ind`` — derives its
+    null distribution under independent sampling within and across groups.
+    Daily returns cluster in volatility, so the effective sample size is
+    smaller than ``min_group_n``/``n1``/``n2`` imply and all four frames carry
+    anti-conservative p-values. This is the same criticism
+    ``correlation_difference_tests`` was rewritten to answer, and the same one
+    recorded on ``ks_pairwise_tests``, ``kruskal_wallis_tests`` and
+    ``quantile_equality_tests``.
+
+    Volatility clustering bears hardest on the variance tests. Levene and
+    Brown-Forsythe treat each day's absolute deviation as one independent
+    draw, and those deviations are the most strongly autocorrelated quantity
+    in the data, so ``BF_p_value`` is the least trustworthy column here.
+
+    It is retained, unfixed, because nothing in the reproduction package
+    reports it. Its sole caller is ``RegimeDistributionalAnalysis.moment_tests``
+    — see that method for where the four frames go, and for why none of them
+    reaches disk.
     """
     common_idx = df_returns.index.intersection(regime_labels.index)
     X = df_returns.loc[common_idx]
@@ -411,7 +432,30 @@ class RegimeDistributionalAnalysis:
         return pd.DataFrame(rows).sort_values(["asset", "regime"])
 
     def moment_tests(self, df_returns: pd.DataFrame, regime_labels: pd.Series) -> Dict[str, pd.DataFrame]:
-        """ANOVA and Brown-Forsythe tests."""
+        """ANOVA and Brown-Forsythe tests.
+
+        ASSUMES INDEPENDENT OBSERVATIONS, AND NOT USED FOR ANY REPORTED RESULT.
+
+        This method only renames columns; the tests run in
+        ``compare_means_vols_across_regimes_hard``, whose docstring states why
+        the p-values in all four returned frames are anti-conservative under
+        volatility clustering.
+
+        They are retained, unfixed, because nothing in the reproduction package
+        reports them. Of the four frames, only two are consumed at all:
+        ``paper_tables`` takes ``ANOVA_p_value`` from ``anova_means`` and
+        ``BF_p_value`` from ``brown_forsythe_vols`` into ``paper_omnibus_raw``,
+        which ``research/analysis/pipeline.py`` never writes to disk — only
+        ``paper_profiles_raw`` is saved, and Table 3 carries point estimates
+        only. ``pairwise_welch_means`` and ``pairwise_bf_vols`` have no consumer
+        anywhere in the repository. The other caller, ``run_all``, has no
+        callers.
+
+        If any future artefact does report these p-values, they need a
+        serial-dependence-robust procedure first; see
+        ``correlation_difference_tests`` for the block-resampling approach and
+        for why a within-regime block bootstrap is not applicable here.
+        """
         tests = compare_means_vols_across_regimes_hard(
             df_returns=df_returns,
             regime_labels=regime_labels,
@@ -481,7 +525,39 @@ class RegimeDistributionalAnalysis:
         return pd.DataFrame(rows).sort_values(["p_value", "asset", "regime_1", "regime_2"]) if rows else pd.DataFrame()
 
     def anderson_darling_k_sample_tests(self, df_returns: pd.DataFrame, regime_labels: pd.Series) -> pd.DataFrame:
-        """Omnibus Anderson-Darling k-sample test."""
+        """Omnibus Anderson-Darling k-sample test.
+
+        ASSUMES INDEPENDENT OBSERVATIONS, AND NOT USED FOR ANY REPORTED RESULT.
+
+        ``stats.anderson_ksamp`` derives its null under independent sampling
+        within and across groups. Daily returns cluster in volatility, so the
+        effective sample size is smaller than ``min_group_n`` implies and
+        ``p_value_approx`` is anti-conservative — the same criticism
+        ``correlation_difference_tests`` was rewritten to answer, and the same
+        one recorded on ``ks_pairwise_tests``, ``kruskal_wallis_tests``,
+        ``quantile_equality_tests`` and ``moment_tests``.
+
+        ``p_value_approx`` is approximate for a second, unrelated reason, which
+        is why it is named that way: SciPy returns a ``significance_level``
+        interpolated from a small table of critical values and clipped to that
+        table's range — floored at 0.001 and capped at 0.25 (verified on SciPy
+        1.18.0, which emits a "p-value floored" warning when it binds). The
+        value saturates rather than continuing to fall, so it is not a p-value
+        computed from the statistic and should not be read as one even under
+        iid sampling.
+
+        It is retained, unfixed, because nothing in the reproduction package
+        reports it. Its output reaches ``paper_tables`` as the
+        ``AD_p_value_approx`` column of ``paper_omnibus_raw``, which
+        ``research/analysis/pipeline.py`` never writes to disk — only
+        ``paper_profiles_raw`` is saved, and Table 3 carries point estimates
+        only. The other caller, ``run_all``, has no callers.
+
+        If any future artefact does report this column, it needs both a
+        serial-dependence-robust procedure and a real p-value; see
+        ``correlation_difference_tests`` for the block-resampling approach and
+        for why a within-regime block bootstrap is not applicable here.
+        """
         X, z = self._align(df_returns, regime_labels)
         assets = X.columns.tolist()
 

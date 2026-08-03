@@ -152,6 +152,12 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 | `models/regime_analysis.py` | `ks_pairwise_tests` | Docstring warning, same form as 12a: `ks_2samp` derives its null under iid sampling, daily returns cluster in volatility, so the p-values are anti-conservative. Records that the output reaches only the `KS_p_value` column of `paper_comparison_raw`, which `pipeline.py` never writes, and what to do if a future artefact reports it. **Behaviour unchanged.** | DONE |
 | `models/regime_analysis.py` | `kruskal_wallis_tests` | Same warning for the chi-square null of `stats.kruskal`. Records that `paper_tables` calls it **twice** and both results stay in memory — `KW_p_value` in `paper_comparison_raw` *and* in `paper_omnibus_raw`, neither written to disk. **Behaviour unchanged.** | DONE |
 
+| **POINT 7 follow-up** — Open question 14 (completes the sweep) | | | |
+|---|---|---|---|
+| `models/regime_analysis.py` | `compare_means_vols_across_regimes_hard` | Warning placed where the tests actually run: `f_oneway`, `levene` and `ttest_ind` all assume independent observations, so all four returned frames carry anti-conservative p-values. Notes that the variance tests are worst-affected — Brown-Forsythe treats each day's absolute deviation as an independent draw, and those are the most strongly autocorrelated quantity in the data. **Behaviour unchanged.** | DONE |
+| `models/regime_analysis.py` | `moment_tests` | Points at the helper for the statistics; records the routing. Only 2 of the 4 frames are consumed — `ANOVA_p_value` and `BF_p_value` into `paper_omnibus_raw`, never written; `pairwise_welch_means` and `pairwise_bf_vols` have **no consumer anywhere**. **Behaviour unchanged.** | DONE |
+| `models/regime_analysis.py` | `anderson_darling_k_sample_tests` | Same warning, plus a **second, unrelated caveat**: `p_value_approx` is interpolated from SciPy's critical-value table and clipped to it — floored at 0.001, capped at 0.25 (verified on SciPy 1.18.0, which warns "p-value floored"). It saturates rather than continuing to fall and is not a p-value even under iid. **Behaviour unchanged.** | DONE |
+
 **Output files after this change set** — nothing renamed, moved or deleted:
 
 | File | Status | Content | Consumed by |
@@ -167,6 +173,51 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 
 *Newest first. One entry per working session, written before every commit and at
 the end of every session even if nothing was committed.*
+
+### 2026-08-03 — Open question 14 closed; sweep complete, `v1.0-revision` retagged and pushed
+
+**Done.** The disclosure sweep begun in 12a now covers **every** iid-assuming
+test in the package. Three change-set rows, docstrings only. This closes the
+codebase side of the revision.
+
+**Placement.** The ruling named three docstrings — AD, ANOVA, Brown-Forsythe —
+but ANOVA and BF are not separate functions. `moment_tests` only renames
+columns; the tests themselves run in the module-level
+`compare_means_vols_across_regimes_hard`. So the warning went on the helper,
+where a reader who lands on `stats.levene` will see it, and `moment_tests`
+carries the routing and points there. Still three docstrings, placed where the
+statistics are rather than where the ruling assumed they were.
+
+**Two facts beyond what the ruling assumed.**
+
+1. **Two of the four frames go nowhere at all.** `moment_tests` returns
+   `pairwise_welch_means` and `pairwise_bf_vols` alongside the two that reach
+   `paper_omnibus_raw`. Neither has a consumer **anywhere in the repository** —
+   they are computed on every pipeline run and discarded. Recorded in the
+   docstring rather than removed; deleting live code was not the ruling.
+2. **`AD_p_value_approx` has a second defect the iid framing does not cover.**
+   It is not a p-value at all: SciPy interpolates a `significance_level` from a
+   small critical-value table and clips it to that table's range. Verified
+   empirically on SciPy 1.18.0 — two clearly different samples return exactly
+   0.001 with a "p-value floored" warning, and the upper cap is 0.25. So the
+   column saturates rather than continuing to fall, and would misreport even
+   under perfect independence. Disclosed as its own paragraph, since a reviewer
+   reading only the iid warning would still misread the column.
+
+**Tested.** `compileall` clean over `core`, `models`, `research`; all three
+docstrings verified present at import; the SciPy clipping claim verified by
+running it rather than cited from memory. **No pipeline re-run**, deliberately:
+no executable line changed, and the tree was established byte-stable on
+2026-08-03.
+
+**Codebase complete.** Nothing remains open. `v1.0-revision` was deleted and
+recreated at the new commit, and `main` plus the tag pushed to origin.
+
+**Next — chapter text only, and it is all author work.** Withdraw the
+bond/credit claim, soften equity/cash, state **15** tests not 12, move the
+Table 4 caption to the q-value scheme, and add the sentence that the reported
+CIs are unadjusted per-pair intervals while the stars are BH-adjusted. Zenodo
+deposit waits on the final manuscript and has deliberately not been done.
 
 ### 2026-08-03 — Open question 13 closed; merged to `main`, tagged `v1.0-revision`
 
@@ -649,15 +700,27 @@ backtest numbers should not go to the editor until that is resolved.
 
 *Numbered. Resolution noted next to the item before removal.*
 
-14. **[OPEN — author]** The disclosure sweep begun in 12a and continued in 13 is
-    not complete. `anderson_darling_k_sample_tests` and `moment_tests` (ANOVA,
+14. **[RESOLVED 2026-08-03 — implemented, see Session log]** The disclosure
+    sweep begun in 12a and continued in 13 was not complete.
+    `anderson_darling_k_sample_tests` and `moment_tests` (ANOVA,
     Brown-Forsythe) rest on the same independent-observations assumption and
     feed `AD_p_value_approx`, `ANOVA_p_value` and `BF_p_value` into
     `paper_omnibus_raw` — the frame `pipeline.py` does not write. **No reported
-    number depends on them**, so this affects nothing in the chapter and did not
-    block `v1.0-revision`. The only question is whether every iid-assuming test
-    in the package should carry the warning, or only those a reviewer is likely
-    to look at. Cost is three docstrings and no re-run.
+    number depends on them**, so this affected nothing in the chapter.
+
+    **Resolution: disclose in the docstrings, leave the code**, per author
+    instruction — the same ruling as 12a and 13, now applied to every
+    iid-assuming test in the package. The warning for ANOVA/BF sits on
+    `compare_means_vols_across_regimes_hard`, where the tests actually run,
+    not on the `moment_tests` wrapper that renames their columns.
+
+    Two things the sweep surfaced, both recorded in the docstrings:
+    `pairwise_welch_means` and `pairwise_bf_vols` have no consumer anywhere in
+    the repository, and `AD_p_value_approx` is not a p-value at all — SciPy
+    clips it to a tabulated range (floored 0.001, capped 0.25), so it saturates
+    even under perfect independence.
+
+    **This was the last open item on the codebase.**
 
 13. **[RESOLVED 2026-08-03 — implemented, see Session log]** The KS and
     Kruskal-Wallis tests in `paper_tables` share the 12a defect: `ks_2samp` and
