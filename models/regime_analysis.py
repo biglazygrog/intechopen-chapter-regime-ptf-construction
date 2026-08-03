@@ -434,7 +434,28 @@ class RegimeDistributionalAnalysis:
         }
 
     def ks_pairwise_tests(self, df_returns: pd.DataFrame, regime_labels: pd.Series) -> pd.DataFrame:
-        """Pairwise Kolmogorov-Smirnov tests across regimes."""
+        """Pairwise Kolmogorov-Smirnov tests across regimes.
+
+        ASSUMES INDEPENDENT OBSERVATIONS, AND NOT USED FOR ANY REPORTED RESULT.
+
+        ``ks_2samp`` derives its null distribution under iid sampling. Daily
+        returns cluster in volatility, so the effective sample size is smaller
+        than ``n1``/``n2`` and the p-values are anti-conservative — the same
+        criticism ``correlation_difference_tests`` was rewritten to answer, and
+        the same one recorded on ``quantile_equality_tests``.
+
+        It is retained, unfixed, because nothing in the reproduction package
+        reports it. Its p-values reach ``paper_tables`` as the ``KS_p_value``
+        column of ``paper_comparison_raw``, which
+        ``research/analysis/pipeline.py`` never writes to disk — only
+        ``paper_profiles_raw`` is saved, and Table 3 carries point estimates
+        only. The other caller, ``run_all``, has no callers.
+
+        If any future artefact does report these p-values, they need a
+        serial-dependence-robust procedure first; see
+        ``correlation_difference_tests`` for the block-resampling approach and
+        for why a within-regime block bootstrap is not applicable here.
+        """
         X, z = self._align(df_returns, regime_labels)
         assets = X.columns.tolist()
 
@@ -490,7 +511,30 @@ class RegimeDistributionalAnalysis:
         return pd.DataFrame(rows).sort_values(["p_value_approx", "asset"]) if rows else pd.DataFrame()
 
     def kruskal_wallis_tests(self, df_returns: pd.DataFrame, regime_labels: pd.Series) -> pd.DataFrame:
-        """Omnibus Kruskal-Wallis test."""
+        """Omnibus Kruskal-Wallis test.
+
+        ASSUMES INDEPENDENT OBSERVATIONS, AND NOT USED FOR ANY REPORTED RESULT.
+
+        ``stats.kruskal`` derives its chi-square null under independent
+        sampling within and across groups. Daily returns cluster in volatility,
+        so the effective sample size is smaller than ``min_group_n`` implies and
+        the p-values are anti-conservative — the same criticism
+        ``correlation_difference_tests`` was rewritten to answer, and the same
+        one recorded on ``ks_pairwise_tests`` and ``quantile_equality_tests``.
+
+        It is retained, unfixed, because nothing in the reproduction package
+        reports it. ``paper_tables`` calls it twice and keeps both results in
+        memory only: as the ``KW_p_value`` column of ``paper_comparison_raw``
+        and as the same column of ``paper_omnibus_raw``.
+        ``research/analysis/pipeline.py`` writes neither — only
+        ``paper_profiles_raw`` is saved, and Table 3 carries point estimates
+        only. The other caller, ``run_all``, has no callers.
+
+        If any future artefact does report these p-values, they need a
+        serial-dependence-robust procedure first; see
+        ``correlation_difference_tests`` for the block-resampling approach and
+        for why a within-regime block bootstrap is not applicable here.
+        """
         X, z = self._align(df_returns, regime_labels)
         assets = X.columns.tolist()
 

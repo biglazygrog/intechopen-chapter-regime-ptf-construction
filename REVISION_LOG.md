@@ -147,6 +147,11 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 | `models/regime_analysis.py` | `correlation_difference_tests` docstring | **12b.** Notes section documents the two significance columns and records that `ci_low`/`ci_high` — and Table 4's printed CI columns — are per-pair and unadjusted. | DONE |
 | `research/analysis/correlations.py` | `main` | **12b.** Printed caption gains a line stating the CI columns are unadjusted for multiple testing while the stars follow BH q, so a pair may show a CI excluding zero and carry fewer than two stars. Table output unchanged. | DONE |
 
+| **POINT 7 follow-up** — Open question 13 | | | |
+|---|---|---|---|
+| `models/regime_analysis.py` | `ks_pairwise_tests` | Docstring warning, same form as 12a: `ks_2samp` derives its null under iid sampling, daily returns cluster in volatility, so the p-values are anti-conservative. Records that the output reaches only the `KS_p_value` column of `paper_comparison_raw`, which `pipeline.py` never writes, and what to do if a future artefact reports it. **Behaviour unchanged.** | DONE |
+| `models/regime_analysis.py` | `kruskal_wallis_tests` | Same warning for the chi-square null of `stats.kruskal`. Records that `paper_tables` calls it **twice** and both results stay in memory — `KW_p_value` in `paper_comparison_raw` *and* in `paper_omnibus_raw`, neither written to disk. **Behaviour unchanged.** | DONE |
+
 **Output files after this change set** — nothing renamed, moved or deleted:
 
 | File | Status | Content | Consumed by |
@@ -162,6 +167,46 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 
 *Newest first. One entry per working session, written before every commit and at
 the end of every session even if nothing was committed.*
+
+### 2026-08-03 — Open question 13 closed; merged to `main`, tagged `v1.0-revision`
+
+**Done.** The last two iid-assuming tests in `paper_tables` now carry the same
+disclosure as 12a, per author ruling. Two change-set rows, docstrings only.
+
+Resumed after a terminal restart. The KS half of this was **already sitting
+uncommitted** in the working tree from the pre-restart session — the tree was
+not clean as believed. It was verified line by line rather than trusted, and one
+error was found and corrected: it named the second caller
+`run_full_analysis`, which does not exist. The method is `run_all`
+(`regime_analysis.py:1118`), and it does have no callers, so the conclusion held
+but the reference was wrong. The same wrong name is **not** present in the
+committed 12a docstring, which says "Nothing else calls this method."
+
+**One fact beyond what the ruling assumed.** KW is not a single-destination
+test: `paper_tables` calls `kruskal_wallis_tests` **twice** (l.766 and l.800),
+so `KW_p_value` lands in `paper_comparison_raw` *and* in `paper_omnibus_raw`.
+The 12a argument still carries — `pipeline.py` writes neither; only
+`paper_profiles_raw` is saved (l.200) — but the docstring names both frames
+rather than repeating the single-frame wording from 12a.
+
+**Tested.** `compileall` clean over `core`, `models`, `research`; both
+docstrings verified present at import. **No pipeline re-run**, deliberately:
+the diff is two docstrings, no executable line changed, and the 2026-08-03
+Point-7-prep run already established the whole `output_charts` tree byte-stable.
+
+**Still open, not blocking the tag.** The same iid assumption sits in
+`anderson_darling_k_sample_tests` and in `moment_tests` (ANOVA, Brown-Forsythe),
+which feed `AD_p_value_approx`, `ANOVA_p_value` and `BF_p_value` into
+`paper_omnibus_raw` — the same unwritten frame. No reported number depends on
+them either, so this changes nothing in the chapter; it is only a question of
+whether the disclosure sweep should be complete. Recorded as Open question 14
+for the author.
+
+**Next.** Chapter text only — the list is unchanged from the Point 7 entry:
+withdraw the bond/credit claim, soften equity/cash, state **15** tests not 12,
+move the Table 4 caption to the q-value scheme, and add the sentence that the
+reported CIs are unadjusted per-pair intervals while the stars are BH-adjusted.
+Zenodo deposit deliberately **not** done — it waits on the final manuscript.
 
 ### 2026-08-03 — Open question 12 closed (12a disclosure, 12b second flag)
 
@@ -603,6 +648,32 @@ backtest numbers should not go to the editor until that is resolved.
 ## Open questions
 
 *Numbered. Resolution noted next to the item before removal.*
+
+14. **[OPEN — author]** The disclosure sweep begun in 12a and continued in 13 is
+    not complete. `anderson_darling_k_sample_tests` and `moment_tests` (ANOVA,
+    Brown-Forsythe) rest on the same independent-observations assumption and
+    feed `AD_p_value_approx`, `ANOVA_p_value` and `BF_p_value` into
+    `paper_omnibus_raw` — the frame `pipeline.py` does not write. **No reported
+    number depends on them**, so this affects nothing in the chapter and did not
+    block `v1.0-revision`. The only question is whether every iid-assuming test
+    in the package should carry the warning, or only those a reviewer is likely
+    to look at. Cost is three docstrings and no re-run.
+
+13. **[RESOLVED 2026-08-03 — implemented, see Session log]** The KS and
+    Kruskal-Wallis tests in `paper_tables` share the 12a defect: `ks_2samp` and
+    `stats.kruskal` both derive their null distributions under independent
+    sampling, and daily returns cluster in volatility, so both sets of p-values
+    are anti-conservative.
+
+    As with 12a, neither drives a reported result. `KS_p_value` reaches
+    `paper_comparison_raw`; `KW_p_value` reaches `paper_comparison_raw` **and**
+    `paper_omnibus_raw` (`paper_tables` calls the KW function twice, l.766 and
+    l.800). `research/analysis/pipeline.py` writes none of those frames — only
+    `paper_profiles_raw` — and Table 3 carries point estimates only.
+
+    **Resolution: disclose in the docstrings, leave the code**, per author
+    instruction. Behaviour unchanged; no artefact regenerated. See Open question
+    14 for the tests this sweep still does not cover.
 
 12. **[RESOLVED 2026-08-03 — implemented, see Session log]** Two issues surfaced
     while implementing Point 7. Neither blocked the Point 7 fix; both are now
