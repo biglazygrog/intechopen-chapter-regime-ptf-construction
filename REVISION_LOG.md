@@ -174,6 +174,85 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 *Newest first. One entry per working session, written before every commit and at
 the end of every session even if nothing was committed.*
 
+### 2026-08-29 — Second round of reviewer comments: three documentation/data corrections
+
+**Scope.** Documentation and data-label corrections only. **No estimation code
+was touched**: no `.py` file outside docstrings, no output CSV, no figure, no
+table TSV. `models/regime_analysis.py` is the only `.py` file in this commit and
+its diff is entirely inside three docstrings — verified by inspection and by
+`python -m py_compile`. The stale binary artefacts in the working tree
+(`*.xlsx`, `figures/*.pdf`) were **deliberately left unstaged**; they predate
+this session and are not part of this change set.
+
+**Reviewer comment 1 — `LD12TRUU` is mislabelled in the asset master.**
+`data/data_master_v1.csv` classified `LD12TRUU Index` under `asset_block =
+Credit`, which is wrong: the series is a Bloomberg US Short Treasury 1-12 Month
+index used throughout the paper as the cash proxy, and is already exempted from
+the synchronous-trading filter on exactly that basis
+(`core.utils.CASH_LIKE_ASSETS`). Corrected `asset_block`: `Credit` → `Cash`.
+
+*The second half of this comment was NOT actioned — see "Held back" below.*
+
+**Reviewer comment 2 — no way to verify a run reproduced the paper.** `README.md`
+gave the execution order but no expected output, so a reader had no check that
+their run succeeded. Added two sections after "Reproducing the paper":
+
+- **"Expected headline outputs"** — the five backtest Sharpe ratios and max
+  drawdowns (Oracle 1.154 / −14.8%, Unconditional 0.799 / −14.7%, AR Baseline
+  0.753 / −18.5%, AR Change 0.753 / −18.2%, Random Walk 0.648 / −21.8%). These
+  match the Block 2 final table in this log exactly; nothing was recomputed.
+- **"Verified environment"** — Python 3.13.11, numpy 2.5.2, pandas 3.0.5, and
+  the reviewer's independent reproduction on that stack to a maximum numerical
+  disagreement of 1.5e-10 across all output CSVs.
+
+**Reviewer comment 3 — the distributional-test docstrings contradict the
+manuscript.** `ks_pairwise_tests`, `kruskal_wallis_tests` and
+`quantile_equality_tests` each asserted the function drove no reported result.
+That is incorrect — their results are reported in **Table 3**. This assertion
+originated in the Open question 13/14 disclosure sweep (2026-08-02/03), which
+traced the values only as far as `paper_comparison_raw` not being written to
+disk and wrongly concluded from that they were unreported. Each docstring now:
+(a) drops the "not used for any reported result" claim, (b) states the results
+are reported in Table 3, and (c) **retains** the iid disclosure — these tests
+assume independent observations, which for financial returns overstates the
+effective sample size, so the values are to be read as indicative rather than
+exact. The forward-looking "if any future artefact reports these" paragraph was
+rephrased to the present tense, since that condition now holds.
+
+**Held back — `display_name` correction not applied (needs author decision).**
+The comment also asked to change `display_name` from `high_yield` to `Cash` in
+`data/data_master_v1.csv`. Not actioned, for two reasons:
+
+1. **There is no `display_name` column.** The file's columns are `bbg_ticker,
+   name, asset_block`. The value `high_yield` sits in `name`.
+2. **`name` is a live estimation join key, not a label.** `data/reader1.py`
+   builds `mapping = master.set_index("bbg_ticker")["name"]` and renames the raw
+   price columns to it, so `name` becomes the DataFrame column name every
+   downstream module keys on — including `CASH_LIKE_ASSETS = ("high_yield",)`.
+   Renaming it to `Cash` would leave that tuple matching no column, silently
+   un-exempting cash from the synchronous-trading filter and reverting the
+   entire Block 2 grid correction (T back from 6,269 toward 3,643), changing
+   every headline number in Figures 2-4. `CORE_ASSETS`, `ASSET_DISPLAY` and
+   `CORRELATION_DISPLAY` in `core/config.py` would break identically.
+
+**The display label the reviewer asked for already exists** and is already
+correct: `ASSET_DISPLAY["high_yield"] = "Cash"` and
+`CORRELATION_DISPLAY["high_yield"] = "Cash"` (`core/config.py:120,138`), so every
+paper table already prints "Cash". If the intent is to remove the misleading
+internal identifier as well, that is a rename across `reader1.py`, `core/utils.py`
+and `core/config.py` plus a full re-run — a separate change set, not a data-file
+edit. **Author to decide.**
+
+**Also noted, not actioned.** Three further functions in `models/regime_analysis.py`
+still carry the same "NOT USED FOR ANY REPORTED RESULT" claim:
+`compare_means_vols_across_regimes_hard`, `moment_tests`, and
+`anderson_darling_k_sample_tests`. The reviewer named only the three functions
+corrected above, so these were left alone — but if the Table 3 tracing was wrong
+for three functions it may be wrong for these too. Worth checking against the
+manuscript before the next submission.
+
+---
+
 ### 2026-08-03 — Open question 14 closed; sweep complete, `v1.0-revision` retagged and pushed
 
 **Done.** The disclosure sweep begun in 12a now covers **every** iid-assuming
