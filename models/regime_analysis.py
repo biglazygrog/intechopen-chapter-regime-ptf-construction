@@ -480,20 +480,28 @@ class RegimeDistributionalAnalysis:
     def ks_pairwise_tests(self, df_returns: pd.DataFrame, regime_labels: pd.Series) -> pd.DataFrame:
         """Pairwise Kolmogorov-Smirnov tests across regimes.
 
-        ASSUMES INDEPENDENT OBSERVATIONS. REPORTED IN TABLE 3.
-
-        Results from this function are reported in Table 3 of the manuscript.
-        Its p-values reach ``paper_tables`` as the ``KS_p_value`` column of
-        ``paper_comparison_raw``.
+        ASSUMES INDEPENDENT OBSERVATIONS, AND NOT USED FOR ANY REPORTED RESULT.
 
         ``ks_2samp`` derives its null distribution under iid sampling. Daily
         returns cluster in volatility, so the effective sample size is smaller
         than ``n1``/``n2`` and the p-values are anti-conservative — the same
         criticism ``correlation_difference_tests`` was rewritten to answer, and
-        the same one recorded on ``quantile_equality_tests``. The reported
-        p-values should therefore be read as **indicative rather than exact**.
+        the same one recorded on ``quantile_equality_tests``.
 
-        Making them exact requires a serial-dependence-robust procedure; see
+        It is retained, unfixed, because nothing in the reproduction package
+        reports it. Its p-values reach ``paper_tables`` as the ``KS_p_value``
+        column of ``paper_comparison_raw``, which
+        ``research/analysis/pipeline.py`` never writes to disk — only
+        ``paper_profiles_raw`` is saved, and Table 3 carries point estimates
+        only. The other caller, ``run_all``, has no callers.
+
+        Reviewer Point 10 (second round) asserted these results are reported in
+        Table 3; the claim was investigated and rejected — the full output chain
+        was traced, ``paper_comparison_raw`` and ``paper_omnibus_raw`` are never
+        written to disk, and the original claim above is correct.
+
+        If any future artefact does report these p-values, they need a
+        serial-dependence-robust procedure first; see
         ``correlation_difference_tests`` for the block-resampling approach and
         for why a within-regime block bootstrap is not applicable here.
         """
@@ -586,12 +594,7 @@ class RegimeDistributionalAnalysis:
     def kruskal_wallis_tests(self, df_returns: pd.DataFrame, regime_labels: pd.Series) -> pd.DataFrame:
         """Omnibus Kruskal-Wallis test.
 
-        ASSUMES INDEPENDENT OBSERVATIONS. REPORTED IN TABLE 3.
-
-        Results from this function are reported in Table 3 of the manuscript.
-        ``paper_tables`` calls it twice: the results reach the ``KW_p_value``
-        column of ``paper_comparison_raw`` and the same column of
-        ``paper_omnibus_raw``.
+        ASSUMES INDEPENDENT OBSERVATIONS, AND NOT USED FOR ANY REPORTED RESULT.
 
         ``stats.kruskal`` derives its chi-square null under independent
         sampling within and across groups. Daily returns cluster in volatility,
@@ -599,10 +602,22 @@ class RegimeDistributionalAnalysis:
         the p-values are anti-conservative — the same criticism
         ``correlation_difference_tests`` was rewritten to answer, and the same
         one recorded on ``ks_pairwise_tests`` and ``quantile_equality_tests``.
-        The reported p-values should therefore be read as **indicative rather
-        than exact**.
 
-        Making them exact requires a serial-dependence-robust procedure; see
+        It is retained, unfixed, because nothing in the reproduction package
+        reports it. ``paper_tables`` calls it twice and keeps both results in
+        memory only: as the ``KW_p_value`` column of ``paper_comparison_raw``
+        and as the same column of ``paper_omnibus_raw``.
+        ``research/analysis/pipeline.py`` writes neither — only
+        ``paper_profiles_raw`` is saved, and Table 3 carries point estimates
+        only. The other caller, ``run_all``, has no callers.
+
+        Reviewer Point 10 (second round) asserted these results are reported in
+        Table 3; the claim was investigated and rejected — the full output chain
+        was traced, ``paper_comparison_raw`` and ``paper_omnibus_raw`` are never
+        written to disk, and the original claim above is correct.
+
+        If any future artefact does report these p-values, they need a
+        serial-dependence-robust procedure first; see
         ``correlation_difference_tests`` for the block-resampling approach and
         for why a within-regime block bootstrap is not applicable here.
         """
@@ -684,22 +699,30 @@ class RegimeDistributionalAnalysis:
     def quantile_equality_tests(self, df_returns: pd.DataFrame, regime_labels: pd.Series) -> pd.DataFrame:
         """Pairwise bootstrap tests of quantile equality.
 
-        ASSUMES INDEPENDENT OBSERVATIONS. REPORTED IN TABLE 3.
-
-        Results from this function are reported in Table 3 of the manuscript.
-        Its output reaches ``paper_tables`` as the ``Q*_p`` columns of
-        ``paper_comparison_raw``.
+        NOT TIME-SERIES VALID, AND NOT USED FOR ANY REPORTED RESULT.
 
         The resample below is ``rng.choice(x_k, size=n_k, replace=True)`` — iid
         over rows within each regime, exactly the procedure
         ``correlation_difference_tests`` was rewritten to remove. Daily returns
         cluster in volatility, so treating days as independent overstates the
         effective sample size: the intervals are too narrow and the p-values too
-        small. The reported intervals and p-values should therefore be read as
-        **indicative rather than exact**.
+        small. Read the numbers accordingly.
 
-        Making them exact requires replacing the resample with the stationary
-        block bootstrap in ``_stationary_bootstrap_indices`` — see
+        It is retained, unfixed, because nothing in the reproduction package
+        reports it. Its output reaches ``paper_tables`` as the ``Q*_p`` columns
+        of ``paper_comparison_raw``, which ``research/analysis/pipeline.py``
+        never writes to disk — only ``paper_profiles_raw`` is saved. Table 3
+        (``research/analysis/moments.py``) carries point estimates only: no
+        confidence intervals and no p-values. Nothing else calls this method.
+
+        Reviewer Point 10 (second round) asserted these results are reported in
+        Table 3; the claim was investigated and rejected — the full output chain
+        was traced, ``paper_comparison_raw`` and ``paper_omnibus_raw`` are never
+        written to disk, and the original claim above is correct.
+
+        If any future artefact does come to report these p-values, replace the
+        resample with the stationary block bootstrap in
+        ``_stationary_bootstrap_indices`` first — see
         ``correlation_difference_tests`` for the procedure and for why a
         within-regime block bootstrap is not applicable to this data.
         """

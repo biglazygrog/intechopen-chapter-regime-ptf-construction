@@ -174,6 +174,78 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 *Newest first. One entry per working session, written before every commit and at
 the end of every session even if nothing was committed.*
 
+### 2026-08-29 (later) — Reviewer Point 10 investigated and REJECTED; docstring change in `14926e6` reverted
+
+**Outcome: the reviewer was mistaken, the original docstrings were right, and
+the change made earlier today in `14926e6` was wrong and is now reverted.**
+
+**Trigger.** The earlier entry flagged that three *other* functions still carried
+the same "NOT USED FOR ANY REPORTED RESULT" claim, and speculated that if the
+Table 3 tracing was wrong for three functions it was probably wrong for those
+too. The author asked for each to be checked against the same standard. Checking
+them properly required tracing the output chain to disk — which had not been
+done earlier, because reviewer Point 10 had been taken at face value.
+
+**Trace (the evidence).** `paper_tables()` returns seven frames.
+`research/analysis/pipeline.py:200` writes **exactly one** of them:
+
+```python
+tables["paper_profiles_raw"].to_csv(OUTPUT_DIR / "paper_profiles_raw.csv", index=False)
+```
+
+- `paper_comparison_raw` and `paper_omnibus_raw` — which between them carry
+  **every p-value produced by all six test functions** — are never written to
+  disk. `grep` for either name outside `models/regime_analysis.py`: **zero hits**.
+- The one frame that *is* written has no test output. Columns: `asset`, `R0_n`,
+  `R0_mean`, `R0_vol`, `R0_VaR5`, `R0_ES5`, `R0_Q5`, `R0_Q10`, `R0_Q25`, and the
+  `R1_*` equivalents.
+- `research/analysis/moments.py` reads only that CSV and emits Table 3:
+  `Asset, Regime, N, Mean (%/yr), Volatility (%/yr), VaR(5%) (%), ES(5%) (%),
+  Q5 (%), Q10 (%), Q25 (%)` — **point estimates only; no p-value column, no test
+  statistic, no significance markers.**
+- No figure script references any of the six functions.
+- `run_all`, the only other caller, has no callers.
+
+**Author confirmation (2026-08-29).** Table 3 in the manuscript contains point
+estimates only — N, mean, volatility, VaR, ES, Q5, Q10, Q25 — with no p-values
+and no significance markers. The generated table and the manuscript table agree.
+
+**Verdict, all six functions: genuinely unused in any reported result.**
+
+| Function | p-values reach | Written to disk? | Verdict |
+|---|---|---|---|
+| `compare_means_vols_across_regimes_hard` | `moment_tests` (sole caller) | No | Unused — original claim correct |
+| `moment_tests` | `ANOVA_p_value`, `BF_p_value` → `paper_omnibus_raw` | No | Unused — original claim correct |
+| `anderson_darling_k_sample_tests` | `AD_p_value_approx` → `paper_omnibus_raw` | No | Unused — original claim correct |
+| `ks_pairwise_tests` | `KS_p_value` → `paper_comparison_raw` | No | Unused — **`14926e6` was wrong** |
+| `kruskal_wallis_tests` | `KW_p_value` → `paper_comparison_raw` + `paper_omnibus_raw` | No | Unused — **`14926e6` was wrong** |
+| `quantile_equality_tests` | `Q*_p` → `paper_comparison_raw` | No | Unused — **`14926e6` was wrong** |
+
+**Done.** The three docstrings changed in `14926e6` are reverted to their
+original text, each with one added paragraph recording that Point 10 was
+investigated, the chain traced, and the original claim confirmed. Verified by
+`git diff ded6335 -- models/regime_analysis.py`: the *only* difference from the
+pre-`14926e6` state is those three added paragraphs. The three functions the
+author asked about (`compare_means_vols_across_regimes_hard`, `moment_tests`,
+`anderson_darling_k_sample_tests`) were **not** touched — their claims survive
+the check unchanged.
+
+**Process lesson.** `14926e6` changed documentation to match a reviewer's
+assertion without first tracing the code to confirm it. The earlier disclosure
+sweep (Open questions 13/14) had done that tracing and got it right; the
+"correction" undid correct work. **A reviewer claim about what an artefact
+reports is a hypothesis to verify against the output chain, not a fact to
+transcribe.** Nothing else in `14926e6` is affected — the `asset_block` fix and
+the two README sections stand.
+
+**Chapter-text consequence — no disclosure sentence needed.** The Table 3
+disclosure sentence queued for Overleaf is **withdrawn**: Table 3 contains no
+p-values to disclaim, so there is nothing to disclose. Point 10 is misdirected
+and the correct response is a reply-letter note, not a manuscript change. See
+"Chapter-text follow-up" below for the drafted reply text.
+
+---
+
 ### 2026-08-29 — Second round of reviewer comments: three documentation/data corrections
 
 **Scope.** Documentation and data-label corrections only. **No estimation code
@@ -206,7 +278,17 @@ their run succeeded. Added two sections after "Reproducing the paper":
   disagreement of 1.5e-10 across all output CSVs.
 
 **Reviewer comment 3 — the distributional-test docstrings contradict the
-manuscript.** `ks_pairwise_tests`, `kruskal_wallis_tests` and
+manuscript.**
+
+> ⚠️ **SUPERSEDED AND REVERTED — see the 2026-08-29 (later) entry above.** This
+> change was made on the reviewer's assertion without tracing the output chain.
+> The trace was subsequently done and the assertion is **false**: Table 3 carries
+> point estimates only, and `paper_comparison_raw`/`paper_omnibus_raw` are never
+> written to disk. The original docstrings were correct and have been restored.
+> The paragraph below is retained only as a record of what was done and why it
+> was wrong. Comments 1 and 2 in this entry are unaffected and stand.
+
+`ks_pairwise_tests`, `kruskal_wallis_tests` and
 `quantile_equality_tests` each asserted the function drove no reported result.
 That is incorrect — their results are reported in **Table 3**. This assertion
 originated in the Open question 13/14 disclosure sweep (2026-08-02/03), which
@@ -250,6 +332,11 @@ still carry the same "NOT USED FOR ANY REPORTED RESULT" claim:
 corrected above, so these were left alone — but if the Table 3 tracing was wrong
 for three functions it may be wrong for these too. Worth checking against the
 manuscript before the next submission.
+
+> ✅ **RESOLVED same day — see the 2026-08-29 (later) entry above.** All three
+> were checked and their claims are **correct**; they were left unchanged. The
+> check also established that the speculation ran the wrong way: the tracing was
+> right all along, and it was the "correction" to the other three that was wrong.
 
 ---
 
@@ -1130,6 +1217,39 @@ the full 2007 crisis onset is now covered on the paper's own rolling
 provides.
 
 ## Chapter-text follow-up (Block 1 finding, author to action)
+
+### Table 3 disclosure sentence — WITHDRAWN 2026-08-29 (Overleaf note)
+
+**Do not add the queued Table 3 disclosure sentence.** It is not needed and would
+be actively misleading.
+
+The sentence was drafted to disclaim the iid assumption behind p-values in
+Table 3. **Table 3 contains no p-values** — it reports N, mean, volatility,
+VaR(5%), ES(5%), Q5, Q10 and Q25, all point estimates, with no significance
+markers. Confirmed by the author against the manuscript on 2026-08-29 and by
+tracing `moments.py` (see the 2026-08-29 (later) session entry). Adding a
+disclaimer about test assumptions to a table containing no tests would imply
+inferential content the table does not have.
+
+**Reviewer Point 10 is misdirected** — it asserts a reporting relationship that
+does not exist. The correct response is a reply-letter note, with **no change to
+the manuscript**. Draft text for the reply letter:
+
+> **Point 10.** We thank the reviewer for the close reading. We have checked the
+> point and believe it rests on a misunderstanding of what Table 3 reports.
+> Table 3 presents regime-conditional point estimates only — sample size, mean,
+> volatility, VaR(5%), expected shortfall, and the 5th, 10th and 25th percentiles
+> — and contains no p-values or significance markers. The Kolmogorov-Smirnov,
+> Kruskal-Wallis and quantile-equality routines the reviewer refers to are
+> present in the reproduction package but their output is not written to disk and
+> does not enter Table 3 or any other reported result; the source docstrings
+> record this, and we have verified the full output chain. No change to Table 3
+> is therefore required. We note that the reviewer's underlying methodological
+> concern — that tests assuming independent observations overstate the effective
+> sample size for daily financial returns — is one we share: it is exactly why
+> the regime correlation differences in Table 4, which *are* reported, use a
+> stationary block bootstrap (Politis & Romano, 1994) rather than an iid
+> resample.
 
 **Author-approved framing, 2026-07-26.** The Block 1 "short-horizon skill"
 framing is withdrawn — it does not survive the corrected grid and must not
