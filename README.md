@@ -218,7 +218,7 @@ actually traded.
 The single definition lives in `core.utils.filter_synchronous_trading` — it was
 previously duplicated at five call sites that could silently drift apart.
 
-**Cash is exempt.** `high_yield` is `LD12TRUU Index`, a Bloomberg US Short
+**Cash is exempt.** `cash` is `LD12TRUU Index`, a Bloomberg US Short
 Treasury 1-12 Month index (displayed as "Cash"). At a pinned policy rate its true
 daily accrual falls below the stored price precision (~2.6bp on a level of 192
 held to 2 d.p.), so a recorded zero is a rounding artefact of a genuinely

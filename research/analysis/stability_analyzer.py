@@ -576,6 +576,12 @@ if __name__ == "__main__":
         "em_debt",
         "real_estate",
         "energy",
+        # NOTE: this "cash" is the expanded-universe US0003M series
+        # (data_master2.csv), which is a distinct series from the core-universe
+        # cash (LD12TRUU, renamed here from `high_yield`). The two now share a
+        # name, so the concat in `run()` drops the US0003M column and this entry
+        # is skipped as already-in-universe. If the core identifier changes
+        # again, this line needs updating.
         "cash",
     ]
 

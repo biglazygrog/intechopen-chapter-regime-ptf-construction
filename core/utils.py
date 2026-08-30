@@ -12,7 +12,7 @@ from typing import Iterable, Optional, Tuple
 
 # Assets EXEMPT from the zero-return filter.
 #
-# `high_yield` is LD12TRUU Index — a Bloomberg US Short Treasury 1-12 Month
+# `cash` is LD12TRUU Index — a Bloomberg US Short Treasury 1-12 Month
 # index, displayed as "Cash" in ASSET_DISPLAY. Its zero-return stretches track
 # zero-interest-rate policy, not non-trading: at a pinned policy rate the true
 # daily accrual falls below the stored price precision (~2.6bp on a level of 192
@@ -23,7 +23,7 @@ from typing import Iterable, Optional, Tuple
 # Filtering on it was responsible for 96.8% of all dropped rows and removed most
 # of 2009-2016 and 2020-2021 — including 85.2% of the EU sovereign debt crisis
 # and 55.1% of the COVID drawdown. See REVISION_LOG.md, Open questions 8 and 9.
-CASH_LIKE_ASSETS: Tuple[str, ...] = ("high_yield",)
+CASH_LIKE_ASSETS: Tuple[str, ...] = ("cash",)
 
 
 def filter_synchronous_trading(

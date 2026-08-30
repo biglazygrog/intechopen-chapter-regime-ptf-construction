@@ -95,7 +95,7 @@ CORE_ASSETS = [
     "us_treasuries",
     "ig_credit",
     "commodities",
-    "high_yield",
+    "cash",
     "gold",
 ]
 
@@ -117,7 +117,7 @@ ASSET_DISPLAY = {
     "us_treasuries":    "Bonds",
     "ig_credit":        "IG Credit",
     "commodities":      "Commodities",
-    "high_yield":       "Cash",
+    "cash":             "Cash",
     "gold":             "Gold",
     "us_equities":      "US Equities",
     "eu_equities":      "EU Equities",
@@ -135,7 +135,7 @@ CORRELATION_DISPLAY = {
     "us_treasuries":  "Govt Bonds",
     "ig_credit":      "IG Credit",
     "commodities":    "Commodities",
-    "high_yield":     "Cash",
+    "cash":           "Cash",
     "gold":           "Gold",
 }
 
