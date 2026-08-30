@@ -200,6 +200,11 @@ The outputs above were generated and independently verified on:
 The reviewer independently reproduced the results on this stack with a maximum
 numerical disagreement of 1.5e-10 across all output CSVs.
 
+An additional re-run on Python 3.12.1 / numpy 2.5.1 after renaming the internal
+cash identifier reproduced all 10 headline numbers exactly and confirmed 27 of 28
+output CSVs are byte-for-byte identical (the 28th differs in row order only, with
+maximum numerical disagreement of exactly zero).
+
 ## Methodological notes
 
 - **Returns are log returns** (`np.log(P).diff()`). Portfolio backtests use exact log-return compounding (`exp(cumsum)`) and wealth-conserving aggregation (`np.log(w · exp(r))`).
