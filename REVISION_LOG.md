@@ -7,6 +7,54 @@ on its own.
 
 ---
 
+## Status — REVISION COMPLETE (2026-09-03)
+
+**This revision is closed.** Both rounds of editor/reviewer comments have been
+addressed, the manuscript is finalised, the reproduction package is archived, and
+the chapter has been submitted to IntechOpen.
+
+| | |
+|---|---|
+| Manuscript | Finalised and **submitted to IntechOpen** |
+| Archive | Zenodo **v1.1-revision2** |
+| DOI | **10.5281/zenodo.22214251** |
+| Final verification | Figure verification pass, 2026-09-03 (see Session log) |
+
+**What "complete" covers.** Every numbered item in *Open questions* (6-14) is
+marked RESOLVED with its implementing session recorded. The look-ahead fix and
+the two bundled blocks are DONE across the *Change set* table. Round 1 (the
+look-ahead revision request) and round 2 (the three documentation/data
+corrections of 2026-08-29, plus Point 10, investigated and rejected on the
+evidence) are both closed.
+
+**Author-side items closed by finalisation, not by this repository.** Three items
+in this log were parked because they concerned the chapter document, which is not
+present in this environment and could not be checked from here. The author's
+confirmation that the manuscript is finalised and submitted closes them; this
+repository never verified them and does not claim to:
+
+- **Table 1 internal-vs-display label** (Session log, 2026-08-30) — whether the
+  manuscript's Table 1 printed the internal `name` column rather than the display
+  label. Flagged for the author; the chapter `.docx` was never in this environment.
+- **Block 2 Phase 2 draft text** (Session log, 2026-07-26, marked BLOCKED) —
+  blocked on the same missing chapter document.
+- **`display_name` correction held back** (Session log, 2026-08-29) — subsequently
+  **superseded and resolved** by the 2026-08-30 `high_yield` → `cash` rename,
+  which removed the misleading internal identifier across `reader1.py`,
+  `core/utils.py` and `core/config.py` and was confirmed by a full re-run in which
+  all ten headline numbers matched exactly.
+
+**Provenance of the archive details.** The Zenodo version tag, DOI and submission
+status above are recorded as supplied by the author on 2026-09-03. They were not
+independently resolved or verified from this environment.
+
+**State at close.** Working tree clean; the final figure verification pass changed
+no source, figure, table or output artefact. The headline results that stand are
+the Block 2 final table at the end of this log (Oracle 1.154 / Unconditional
+0.799 / AR Change 0.753 / AR Baseline 0.753 / Random Walk 0.648, grid T = 6,269).
+
+---
+
 ## Context
 
 This repository is the reproduction package for *Regime-Aware Portfolio
@@ -173,6 +221,57 @@ Diagnostic item letters (A, B, C, E, F, G, H) refer to the Phase 1 report.
 
 *Newest first. One entry per working session, written before every commit and at
 the end of every session even if nothing was committed.*
+
+### 2026-09-03 — Pre-submission figure verification pass; nothing changed, nothing to commit
+
+**Scope.** Two pre-submission checks requested by the author: (1) confirm Figure 1
+carries a "retrospective" label matching the updated chapter caption, and (2)
+establish whether Table 4 has a separate figure producer that would need
+re-running against the corrected TSV. **No file was modified.** No source, figure,
+table or output artefact changed; `git status` is clean at the end of the pass as
+it was at the start.
+
+**Check 1 — Figure 1 is already labelled retrospective; no edit was needed.** The
+label the caption needs to match is present in three places in
+`research/figures/figure1_regime_probabilities.py`, all predating this session:
+
+| Location | Text |
+|---|---|
+| `ax.set_title` (l.52) | `Posterior Regime Probabilities, Rolling GMM Estimation (2000–2025, retrospective/smoothed)` |
+| `fig.text` note (l.58) | *"retrospective (full-sample smoothed) estimate — each date averages ~20 overlapping in-sample window fits and embeds returns dated up to ~1200 observations later. Descriptive only; not an investable signal."* |
+| module docstring | States the figure deliberately uses the retrospective series and that Figures 2-4 use the one-sided series instead. |
+
+Re-run anyway to confirm the committed artefact matches the current code
+(`python -m research.figures.figure1_regime_probabilities`):
+
+```
+Date range: 2000-10-31 → 2025-11-20
+K=3, avg weights: {'p_0': 0.8074, 'p_1': 0.1906, 'p_2': 0.0021}
+```
+
+- **PNG byte-for-byte identical** to the committed version — md5 `f43c4e2375b81a02eeb8f2cef72838a3` before and after, and a pixel-level comparison over the full 706 × 1934 × 4 array gives a maximum absolute difference of exactly 0.
+- **PDF differed by exactly 9 bytes**, all inside `/CreationDate (D:20260830132719Z)` → `(D:20260903200825Z)`. `Creator` and `Producer` unchanged, file size identical at 295,562 bytes. Content is the same drawing; the drift is the matplotlib PDF backend stamping the wall clock. Restored with `git checkout --` rather than committed, so the tree carries no timestamp-only diff.
+
+**Check 2 — Table 4 is produced as a table only; there is no figure producer.**
+Confirmed three independent ways rather than inferred from the README:
+
+- `research/analysis/correlations.py` imports no plotting library and writes exactly two artefacts — `table4_correlations.csv` (l.62) and `table4_correlations.tsv` (l.67).
+- `grep` for `table4` or `correlation` across `research/figures/*.py`: **zero hits**.
+- Repo-wide `savefig` sweep returns 14 call sites, all accounted for: Figures 1-4, Figure A.1, the `shrinkage.py` before/after chart, and the exploratory helpers in `stability_analyzer.py`, `models/plotting.py` and `models/portfolio.py`. `models/plotting.py` *does* contain correlation-heatmap helpers (`plot_regime_correlations`, `plot_window_regime_correlations`, `plot_corr_over_windows`), which is the one plausible false positive — but the module has **no importers anywhere in the repo** and its helpers write ad-hoc names to `OUTPUT_DIR`, not a chapter figure into `FIGURES_DIR`. None of them is a Table 4 artefact.
+
+**No action was therefore required.** As a stronger check than the author asked
+for, `python -m research.analysis.correlations` was re-run: both
+`table4_correlations.tsv` and `table4_correlations.csv` regenerated
+**byte-identically** to the committed files, so the corrected values on disk are
+exactly what the current code produces from
+`correlation_pairwise_bootstrap.csv`. Headline row unchanged — Govt Bonds / Cash,
+Δρ = +0.176, CI [0.100, 0.247], q < 0.001, `***`.
+
+**Outcome: no commit.** Nothing changed, so there is nothing to commit. Per this
+log's own rule the entry is not committed on its own; it is held and will ride
+along with the next substantive commit.
+
+---
 
 ### 2026-08-30 — Internal identifier `high_yield` renamed to `cash`; full re-run confirms every headline number unchanged
 
